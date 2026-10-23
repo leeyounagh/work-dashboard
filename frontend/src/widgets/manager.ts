@@ -165,7 +165,10 @@ function addRows(ws: Workspace, { catalog, saveWidgets, toast }: ManagerDeps): H
           if (saved) toast(`「${title}」 위젯을 추가했습니다. 카드의 「설정」에서 내용을 입력하세요.`);
           else ok.disabled = false;
         });
-        form.append(name, ok, cancel);
+        // The buttons sit under the name field.
+        const buttons = h('div', 'w-inline-actions');
+        buttons.append(ok, cancel);
+        form.append(name, buttons);
         add.replaceWith(form);
         name.focus();
         name.select();
