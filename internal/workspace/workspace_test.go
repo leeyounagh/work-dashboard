@@ -337,3 +337,19 @@ func TestValidateWidgetKeysAreUnique(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestValidateTopics(t *testing.T) {
+	base := Workspace{ID: "a", Name: "a"}
+	ok := base
+	ok.Topics = []string{"next", "react", "앱", "c++"}
+	if err := ok.Validate(); err != nil {
+		t.Fatalf("valid topics: %v", err)
+	}
+	for _, bad := range [][]string{{""}, {"a b"}, {strings.Repeat("x", 21)}, {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"}} {
+		w := base
+		w.Topics = bad
+		if err := w.Validate(); err == nil {
+			t.Errorf("topics %q: want error", bad)
+		}
+	}
+}

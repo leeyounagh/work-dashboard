@@ -19,10 +19,16 @@ export function removeFolder(ws: Workspace, index: number): Workspace {
   return { ...ws, folders: ws.folders.filter((_, i) => i !== index) };
 }
 
+/** "next, react" → ["next", "react"]: words split on commas or spaces. */
+export function parseTopics(text: string): string[] {
+  return [...new Set(text.split(/[\s,]+/).filter(Boolean))];
+}
+
 export function isDirty(saved: Workspace, draft: Workspace): boolean {
   return (
     saved.name !== draft.name ||
     (saved.notes ?? '') !== (draft.notes ?? '') ||
+    (saved.topics ?? []).join(',') !== (draft.topics ?? []).join(',') ||
     saved.folders.length !== draft.folders.length ||
     saved.folders.some((f, i) => f !== draft.folders[i])
   );

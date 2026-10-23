@@ -15,6 +15,8 @@ export function DeleteWorkspace(arg1:string):Promise<void>;
 
 export function FileDiff(arg1:string):Promise<string>;
 
+export function GuideArticle(arg1:string):Promise<main.Article>;
+
 export function Info():Promise<main.AppInfo>;
 
 export function ListDir(arg1:string):Promise<Array<files.Entry>>;

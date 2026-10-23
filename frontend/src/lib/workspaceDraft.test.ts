@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFolder, base64ToBytes, emptyDraft, isDirty, removeFolder } from './workspaceDraft';
+import { addFolder, base64ToBytes, emptyDraft, isDirty, parseTopics, removeFolder } from './workspaceDraft';
 import type { Workspace } from './widgets';
 
 const ws: Workspace = { id: 'gw', name: 'GW', folders: ['C:\\fe'], widgets: [], notes: '' };
@@ -40,6 +40,15 @@ describe('isDirty', () => {
     expect(isDirty(ws, { ...ws, name: 'X' })).toBe(true);
     expect(isDirty(ws, addFolder(ws, 'C:\\be'))).toBe(true);
     expect(isDirty(ws, { ...ws, notes: 'memo' })).toBe(true);
+    expect(isDirty(ws, { ...ws, topics: ['next'] })).toBe(true);
+    expect(isDirty({ ...ws, topics: [] }, ws)).toBe(false);
+  });
+});
+
+describe('parseTopics', () => {
+  it('splits on commas and spaces, dropping blanks and repeats', () => {
+    expect(parseTopics('next, react  next,,앱')).toEqual(['next', 'react', '앱']);
+    expect(parseTopics('  ')).toEqual([]);
   });
 });
 

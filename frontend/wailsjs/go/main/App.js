@@ -18,6 +18,10 @@ export function FileDiff(arg1) {
   return window['go']['main']['App']['FileDiff'](arg1);
 }
 
+export function GuideArticle(arg1) {
+  return window['go']['main']['App']['GuideArticle'](arg1);
+}
+
 export function Info() {
   return window['go']['main']['App']['Info']();
 }

@@ -5,6 +5,7 @@ import {
   DeleteWorkspace,
   PickFolder,
   CustomSprites,
+  GuideArticle,
   OpenWidgetFile,
   RestorableSessions,
   SearchFiles,
@@ -15,7 +16,7 @@ import {
 import { workspace as models } from '../wailsjs/go/models';
 import { orEmpty, type Definition, type Instance, type ListResult, type Workspace } from './lib/widgets';
 import { WidgetBoard } from './widgets/board';
-import { addFolder, emptyDraft, isDirty, removeFolder } from './lib/workspaceDraft';
+import { addFolder, emptyDraft, isDirty, parseTopics, removeFolder } from './lib/workspaceDraft';
 import { applyOrder, moveBy } from './lib/sortable';
 
 const WS_ORDER_KEY = 'work-dashboard.workspaceOrder';
@@ -37,7 +38,7 @@ function saveWorkspaceOrder(ids: string[]) {
     // Not fatal: the order just isn't remembered.
   }
 }
-import { EventsOn } from '../wailsjs/runtime/runtime';
+import { BrowserOpenURL, EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { Office } from './office/office';
@@ -79,7 +80,19 @@ function startOffice(
 ): { stop: () => void; refresh: () => void } | undefined {
   let office: Office;
   try {
-    office = new Office(byId<HTMLCanvasElement>('floor'), (termId) => tabs.activate(termId));
+    office = new Office(
+      byId<HTMLCanvasElement>('floor'),
+      (termId) => tabs.activate(termId),
+      () => {
+        // A blog or article for the selected workspace's technologies.
+        GuideArticle(current()?.id ?? '')
+          .then((a) => {
+            toast(`가이드: ${a.tech} — 「${a.name}」 를 엽니다`);
+            BrowserOpenURL(a.url);
+          })
+          .catch((err) => toast(`읽을거리를 고르지 못했습니다: ${String(err)}`));
+      },
+    );
   } catch (err) {
     // The office is decorative; the rest of the dashboard should still load.
     console.error('office failed to start', err);
@@ -237,6 +250,7 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
     },
     rename: (name) => state.draft && setDraft({ ...state.draft, name }, false),
     editNotes: (notes) => state.draft && setDraft({ ...state.draft, notes }, false),
+    editTopics: (text) => state.draft && setDraft({ ...state.draft, topics: parseTopics(text) }, false),
     addFolder: async () => {
       if (!state.draft) return;
       try {

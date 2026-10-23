@@ -31,9 +31,9 @@ func TestArgs(t *testing.T) {
 	want := []string{
 		"-p", "--model", "haiku", "--output-format", "json", "--json-schema", string(schema),
 		"--no-session-persistence",
-		// No built-in tools (Bash, Read, ...), no user/local settings (so the
-		// user's own allow rules do not apply), and anything not allowed is denied.
-		"--tools", "", "--setting-sources", "project", "--permission-mode", "dontAsk", "--max-budget-usd", "0.25",
+		// No built-in tools (Bash, Read, ...), and anything not allowed is denied
+		// instead of prompting.
+		"--tools", "", "--permission-mode", "dontAsk", "--max-budget-usd", "0.25",
 		"--allowedTools", "mcp__linear__list_issues,mcp__linear__get_user",
 		"--disallowedTools", "mcp__linear__save_issue",
 		"--", "-list my issues",
@@ -44,7 +44,7 @@ func TestArgs(t *testing.T) {
 	if got := Args(Request{Prompt: "p", Schema: schema, Model: "sonnet"}); got[2] != "sonnet" || slices.Contains(got, "--allowedTools") || slices.Contains(got, "--strict-mcp-config") {
 		t.Fatalf("Args = %q", got)
 	}
-	if got := Args(Request{Prompt: "p", Schema: schema, NoMCP: true}); !slices.Contains(got, "--strict-mcp-config") {
+	if got := Args(Request{Prompt: "p", Schema: schema, NoMCP: true}); !slices.Contains(got, "--strict-mcp-config") || !slices.Contains(got, "--setting-sources") {
 		t.Fatalf("NoMCP: Args = %q", got)
 	}
 }

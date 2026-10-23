@@ -23,6 +23,7 @@ export interface SidebarHandlers {
   create(): void;
   rename(name: string): void;
   editNotes(notes: string): void;
+  editTopics(topics: string): void;
   addFolder(): void;
   removeFolder(index: number): void;
   save(): void;
@@ -101,6 +102,12 @@ function renderEditor(state: SidebarState, draft: Workspace, h: SidebarHandlers)
   notes.value = draft.notes ?? '';
   notes.addEventListener('input', () => h.editNotes(notes.value));
 
+  const topics = node('input', 'field');
+  topics.id = 'ws-topics';
+  topics.placeholder = '비우면 폴더를 보고 자동 (예: next, react · 앱 · go)';
+  topics.value = (draft.topics ?? []).join(', ');
+  topics.addEventListener('input', () => h.editTopics(topics.value));
+
   const actions = node('div', 'actions');
   const save = button(draft.id ? '저장' : '만들기', 'primary', () => h.save());
   save.disabled = !canSave(state);
@@ -115,6 +122,8 @@ function renderEditor(state: SidebarState, draft: Workspace, h: SidebarHandlers)
     button('+ 폴더 추가', 'ghost', () => h.addFolder()),
     label('메모', 'ws-notes'),
     notes,
+    label('가이드 주제 (사무실 가이드가 고를 읽을거리)', 'ws-topics'),
+    topics,
     actions,
   );
   return form;

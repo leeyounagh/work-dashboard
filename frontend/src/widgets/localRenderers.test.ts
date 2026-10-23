@@ -43,6 +43,17 @@ describe('renderLocal', () => {
     expect(notion.textContent).toContain('Ver 1.2.0');
   });
 
+  it('groups my Linear issues with work to do first', () => {
+    const issue = (id: string, state: string, group: string) => ({ id, title: id, state, group, team: 'GRO', url: '', priority: '' });
+    const el = renderLocal(
+      'linear-issues',
+      { issues: [issue('GRO-1', 'Todo', 'todo'), issue('GRO-2', 'In Progress', 'doing'), issue('GRO-3', 'In Review', 'review'), issue('GRO-4', 'Test Passed', 'review')], fetchedAt: '', costUsd: 0 },
+      open,
+    )!;
+    const heads = [...el.querySelectorAll('.w-section')].map((e) => e.textContent);
+    expect(heads).toEqual(['할 일 1', '진행 중 1', '리뷰·확인 중 2']);
+  });
+
   it('wires QA and session buttons to actions', () => {
     const actions = { startQA: vi.fn(), resume: vi.fn() };
     const qa = renderLocal('qa-2pass', { domain: 'groupware', features: ['근태'], modes: ['1차', '2차'], reports: [] }, open, actions)!;
@@ -73,9 +84,11 @@ describe('renderLocal', () => {
       {
         folder: 'C:\docs',
         total: 3,
+        limit: 2,
         files: [
           { name: '2026-10-23_새_문서.html', modified: '2026-10-23T09:00:00Z', size: 2048 },
           { name: '메모.md', modified: '2026-10-20T09:00:00Z', size: 10 },
+          { name: '오래된.md', modified: '2026-10-10T09:00:00Z', size: 10 },
         ],
       },
       open,
@@ -85,10 +98,15 @@ describe('renderLocal', () => {
     expect(el.textContent).toContain('3개 중 2개');
     el.querySelector<HTMLButtonElement>('button.w-file')!.click();
     expect(openFile).toHaveBeenCalledWith('2026-10-23_새_문서.html');
+    // The search covers files beyond the shown ones.
+    const input = el.querySelector('input')!;
+    input.value = '오래된';
+    input.dispatchEvent(new Event('input'));
+    expect([...el.querySelectorAll('button.w-file')].map((b) => b.textContent)).toEqual(['오래된.md']);
   });
 
   it('says so when a folder has no documents', () => {
-    const el = renderLocal('folder-files', { folder: 'C:\docs', total: 0, files: null }, open)!;
+    const el = renderLocal('folder-files', { folder: 'C:\docs', total: 0, limit: 20, files: null }, open)!;
     expect(el.textContent).toContain('문서가 없습니다');
   });
 });

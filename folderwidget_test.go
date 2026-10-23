@@ -68,6 +68,12 @@ func TestFolderFilesFiltersAndLimits(t *testing.T) {
 	if d.Total != 1 || len(d.Files) != 1 || d.Files[0].Name != "2026-10-20_오래된_문서.md" {
 		t.Fatalf("data = %+v", d)
 	}
+	// Every match is sent so the widget can search; limit is how many it shows.
+	h2, wsID2, _, _ := folderHarness(t, map[string]any{"limit": 1})
+	d = h2.app.WidgetData(wsID2, 0).Data.(FolderFilesData)
+	if d.Limit != 1 || len(d.Files) != 2 || d.Total != 2 {
+		t.Fatalf("data = %+v", d)
+	}
 }
 
 func TestFolderFilesNeedsFolder(t *testing.T) {
@@ -114,7 +120,7 @@ func TestFolderFilesClampsLimit(t *testing.T) {
 	writeAt(t, filepath.Join(dir, "a.md"), time.Now())
 	// limit is validated on save; a hand-edited file must still not panic.
 	d, err := folderFiles(widgetdata.Settings{"folder": dir, "limit": -3})
-	if err != nil || len(d.Files) != 1 {
+	if err != nil || d.Limit != 1 {
 		t.Fatalf("folderFiles = %+v, %v", d, err)
 	}
 }

@@ -36,6 +36,7 @@ export interface Workspace {
   folders: string[];
   widgets: Instance[];
   notes?: string;
+  topics?: string[]; // office guide reading topics (empty = detect from folders)
 }
 
 export interface ListResult {

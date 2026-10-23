@@ -27,7 +27,8 @@ func localHarness(t *testing.T, widgets ...widget.Instance) (*harness, workspace
 	h.app.deps.Ask = func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		calls.Add(1)
 		lastArgs = args
-		if strings.Contains(strings.Join(args, " "), "mcp__linear__") {
+		// Every lookup denies both connectors' write tools; tell them apart by what is allowed.
+		if strings.Contains(strings.Join(args, " "), "--allowedTools mcp__linear__") {
 			return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":true,"issues":[{"id":"GRO-1","title":"t","state":"In Review","url":"https://linear.app/x/GRO-1"}]},"total_cost_usd":0.02}`), nil
 		}
 		return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":true,"pages":[{"id":"p","title":"근태 명세","version":"Ver 1.2.0"}]},"total_cost_usd":0.01}`), nil
@@ -372,23 +373,26 @@ func TestLinearInboxWidget(t *testing.T) {
 	h, ws, _, args := localHarness(t, widget.Instance{Type: widget.LinearInbox, Enabled: true})
 	h.app.deps.Ask = func(_ context.Context, _ string, a ...string) ([]byte, error) {
 		*args = a
-		return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":true,"notifications":[
-			{"id":"n1","kind":"mention","title":"GRO-1 에서 멘션","actor":"heywani","createdAt":"2026-10-23T01:00:00Z","read":false,"url":"https://linear.app/x/issue/GRO-1"},
-			{"id":"n2","kind":"assigned","title":"GRO-2 배정","actor":"pm","createdAt":"2026-10-22T01:00:00Z","read":true,"url":"https://evil.example/x"}]}}`), nil
+		return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":true,"myIssues":["GRO-3"],"notifications":[
+			{"id":"n1","type":"issueCommentMention","title":"GRO-1 에서 멘션","actor":"heywani","createdAt":"2026-10-23T01:00:00Z","read":false,"url":"https://linear.app/x/issue/GRO-1"},
+			{"id":"n2","type":"issueAssignedToYou","title":"GRO-2 배정","actor":"pm","createdAt":"2026-10-22T01:00:00Z","read":true,"url":"https://evil.example/x"},
+			{"id":"n3","type":"issueNewComment","title":"내 이슈 댓글","read":false,"url":"https://linear.app/x/issue/GRO-3/a"},
+			{"id":"n4","type":"issueNewComment","title":"구독만 한 이슈","read":false,"url":"https://linear.app/x/issue/GRO-4/b"}]}}`), nil
 	}
 	res := h.app.WidgetData(ws.ID, 0)
 	if res.Error != "" {
 		t.Fatal(res.Error)
 	}
 	d := res.Data.(LinearInboxData)
-	if len(d.Notifications) != 2 || d.Unread != 1 || d.Notifications[1].URL != "" {
+	// Mentions, assignments and my own issues stay; subscriptions go.
+	if len(d.Notifications) != 3 || d.Unread != 2 || d.Notifications[1].URL != "" || d.Notifications[0].Kind != "mention" {
 		t.Fatalf("inbox = %+v", d)
 	}
 	joined := strings.Join(*args, " ")
 	if !strings.Contains(joined, "mcp__linear__get_notifications") || !strings.Contains(joined, "mark_notification") {
 		t.Fatalf("read tool must be allowed and the mark tool disallowed: %q", joined)
 	}
-	if !strings.Contains(joined, "only unread") {
+	if !strings.Contains(joined, "unreadOnly true") || !strings.Contains(joined, "list_issues") {
 		t.Fatalf("unreadOnly not in prompt: %q", joined)
 	}
 }

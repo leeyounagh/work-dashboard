@@ -46,6 +46,9 @@ interface Character {
 
 const short = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
+const GUIDE_ID = 'office-guide';
+const GUIDE_BUBBLE = '읽을거리';
+
 export class Office {
   private readonly chars = new Map<string, Character>();
   private readonly ctx: CanvasRenderingContext2D;
@@ -57,10 +60,13 @@ export class Office {
   private height = 0;
   private readonly observer: ResizeObserver;
   private readonly cleanups: Array<() => void> = [];
+  /** Always in the office; clicking it suggests something to read. */
+  private guide: Character = this.newGuide();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly onPick: (termId: string) => void,
+    private readonly onGuide: () => void,
   ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas is not available');
@@ -71,12 +77,14 @@ export class Office {
 
     const onClick = (e: MouseEvent) => {
       const hit = this.hitTest(e);
-      if (hit) this.onPick(hit.term.id);
+      if (hit === this.guide) this.onGuide();
+      else if (hit) this.onPick(hit.term.id);
     };
     const onMove = (e: MouseEvent) => {
       const hit = this.hitTest(e);
       canvas.style.cursor = hit ? 'pointer' : 'default';
-      canvas.title = hit ? `${hit.term.title} — 클릭하면 터미널로 이동` : '';
+      if (hit === this.guide) canvas.title = '가이드 — 클릭하면 이 워크스페이스 기술에 맞는 블로그 · 아티클을 엽니다';
+      else canvas.title = hit ? `${hit.term.title} — 클릭하면 터미널로 이동` : '';
     };
     canvas.addEventListener('click', onClick);
     canvas.addEventListener('mousemove', onMove);
@@ -87,9 +95,37 @@ export class Office {
     this.frame = requestAnimationFrame((t) => this.loop(t));
   }
 
+  private newGuide(): Character {
+    const term: OfficeTerminal = { id: GUIDE_ID, title: '가이드', workspace: '', workspaceId: '', kind: 'claude', alive: true };
+    const sheet = this.art.ninjas.at(-1) ?? this.art.dog;
+    return {
+      term,
+      state: { mood: 'idle', tool: '', since: 0 },
+      sheet,
+      dog: sheet === this.art.dog,
+      dir: 'down',
+      desk: -1,
+      shown: true,
+      x: 0,
+      y: 0,
+      tx: 0,
+      ty: 0,
+      nextWander: 0,
+      phase: 0,
+    };
+  }
+
+  /** The guide stands at the right of the open floor, below the desks. */
+  private placeGuide() {
+    const x = Math.max(SIZE, this.width - 56);
+    const y = Math.max(this.deskAreaBottom() + SIZE + 24, this.height - 26);
+    this.guide = { ...this.guide, x, y, tx: x, ty: y };
+  }
+
   /** Reloads the character sheets (after custom sprites were found). */
   reloadArt(): void {
     this.art = sheets();
+    this.guide = { ...this.newGuide(), x: this.guide.x, y: this.guide.y, tx: this.guide.tx, ty: this.guide.ty };
     for (const c of this.chars.values()) {
       if (!c.dog) c.sheet = pickSheet(c.term.id, c.term.kind, this.art.ninjas, this.art.dog);
     }
@@ -156,12 +192,16 @@ export class Office {
     this.height = this.canvas.clientHeight;
     const bw = Math.round(this.width * dpr);
     const bh = Math.round(this.height * dpr);
-    if (this.canvas.width !== bw || this.canvas.height !== bh) {
+    const changed = this.canvas.width !== bw || this.canvas.height !== bh;
+    if (changed) {
       this.canvas.width = bw;
       this.canvas.height = bh;
     }
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx.imageSmoothingEnabled = false;
+    // Resizing clears the canvas; draw now instead of at the next (10 fps)
+    // frame, or dragging a splitter flickers.
+    if (changed) this.draw(performance.now());
   }
 
   private hitTest(e: MouseEvent): Character | undefined {
@@ -169,7 +209,7 @@ export class Office {
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
     // Front-most (lowest) character first, matching the drawing order.
-    return this.visible()
+    return [...this.visible(), this.guide]
       .sort((a, b) => b.y - a.y)
       .find((c) => Math.abs(x - c.x) < SIZE / 2 && y > c.y - SIZE && y < c.y + 4);
   }
@@ -227,17 +267,11 @@ export class Office {
     const shown = this.visible();
     if (shown.length) drawRug(ctx, w, this.deskAreaBottom(), h);
 
-    if (!shown.length) {
-      ctx.fillStyle = COLORS.label;
-      ctx.font = `12px ${FONT}`;
-      ctx.textAlign = 'center';
-      ctx.fillText('이 워크스페이스에서 터미널을 열면 캐릭터가 나타납니다', w / 2, h / 2);
-      return;
-    }
+    this.placeGuide();
 
     for (const c of shown) this.drawDesk(c);
     // Back to front so lower characters overlap higher ones.
-    for (const c of shown.sort((a, b) => a.y - b.y)) this.drawCharacter(c, now);
+    for (const c of [...shown, this.guide].sort((a, b) => a.y - b.y)) this.drawCharacter(c, now);
   }
 
   private drawDesk(c: Character) {
@@ -308,7 +342,7 @@ export class Office {
     const progress = c.term.alive ? progressOf(c.state, now) : null;
     if (progress) this.drawProgress(progress, c.x, y - 18);
     const bubbleBottom = progress ? y - 40 : y - 18;
-    const text = c.term.alive ? bubbleFor(c.state) : 'zZ';
+    const text = c === this.guide ? GUIDE_BUBBLE : c.term.alive ? bubbleFor(c.state) : 'zZ';
     if (text && !(c.state.mood === 'waiting' && this.tick % 8 >= 6)) this.drawBubble(text, c.x, bubbleBottom, c.state.mood === 'waiting');
   }
 

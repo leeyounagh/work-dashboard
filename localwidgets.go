@@ -45,18 +45,21 @@ func linearTools(names ...string) []string {
 
 // Exact read-only tools for connector lookups (see claudeask.Request).
 var (
-	linearReadTools  = linearTools("list_issues", "get_issue", "list_teams", "list_issue_statuses", "get_user")
-	linearInboxTools = linearTools("get_notifications", "get_issue", "get_user")
-	linearWriteTools = linearTools(
+	linearReadTools      = linearTools("list_issues", "get_issue", "list_teams", "list_issue_statuses", "get_user")
+	linearInboxTools     = linearTools("get_notifications", "list_issues", "get_issue", "get_user")
+	linearOnlyWriteTools = linearTools(
 		"save_issue", "save_comment", "delete_comment", "create_attachment", "delete_attachment",
 		"share_issue", "save_project", "save_document", "merge_diff", "mark_notification",
 	)
-	notionReadTools  = []string{"mcp__claude_ai_Notion__notion-fetch"}
-	notionWriteTools = []string{
+	notionReadTools      = []string{"mcp__claude_ai_Notion__notion-fetch"}
+	notionOnlyWriteTools = []string{
 		"mcp__claude_ai_Notion__notion-update-page", "mcp__claude_ai_Notion__notion-create-pages",
 		"mcp__claude_ai_Notion__notion-move-pages", "mcp__claude_ai_Notion__notion-duplicate-page",
 		"mcp__claude_ai_Notion__notion-delete-pages", "mcp__claude_ai_Notion__notion-create-comment",
 	}
+	// connectorWriteTools are denied in every lookup, whichever connector it
+	// reads: the user's own allow rules still apply in headless runs.
+	connectorWriteTools = append(append([]string{}, linearOnlyWriteTools...), notionOnlyWriteTools...)
 )
 
 // Links reported by Claude are only kept when they point at the service.
@@ -108,13 +111,16 @@ type WorktreesData struct {
 
 // LinearIssue is one issue as reported by Claude through the Linear connector.
 type LinearIssue struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	State     string `json:"state"`
-	Team      string `json:"team"`
-	URL       string `json:"url"`
-	Priority  string `json:"priority"`
-	UpdatedAt string `json:"updatedAt"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	State string `json:"state"`
+	// StatusType is Linear's category of the state (backlog, unstarted, started, ...).
+	StatusType string `json:"statusType"`
+	Group      string `json:"group"` // todo, doing or review (set here, not by Claude)
+	Team       string `json:"team"`
+	URL        string `json:"url"`
+	Priority   string `json:"priority"`
+	UpdatedAt  string `json:"updatedAt"`
 }
 
 // LinearData feeds the Linear widget.
@@ -320,7 +326,7 @@ func (a *App) ask(ctx context.Context, r claudeask.Request, out any) (float64, e
 // connector shows as an error instead of an empty (normal-looking) list.
 var linearSchema = json.RawMessage(`{"type":"object","properties":{"connectorAvailable":{"type":"boolean"},
 "issues":{"type":"array","items":{"type":"object",
-"properties":{"id":{"type":"string"},"title":{"type":"string"},"state":{"type":"string"},"team":{"type":"string"},
+"properties":{"id":{"type":"string"},"title":{"type":"string"},"state":{"type":"string"},"statusType":{"type":"string"},"team":{"type":"string"},
 "url":{"type":"string"},"priority":{"type":"string"},"updatedAt":{"type":"string"}},"required":["id","title","state","url"]}}},
 "required":["connectorAvailable","issues"]}`)
 
@@ -334,7 +340,11 @@ func (a *App) linear(ctx context.Context, s widgetdata.Settings, fresh bool) (an
 	if err := checkFilters("상태", states, filterPattern); err != nil {
 		return nil, err
 	}
-	prompt := "Using the Linear MCP tools, list issues assigned to me that are not completed or canceled (at most 50)."
+	// Asking for exact fields keeps issue descriptions out of the context:
+	// with them a long list went over the lookup's budget.
+	prompt := "Call the Linear list_issues tool once with assignee \"me\", limit 100 and fields" +
+		" [\"id\",\"title\",\"status\",\"statusType\",\"priority\",\"url\",\"team\",\"updatedAt\"]." +
+		" Keep the issues whose statusType is not completed or canceled; give state (the status name) and statusType."
 	if len(teams) > 0 {
 		prompt += " Only teams: " + strings.Join(teams, ", ") + "."
 	}
@@ -348,7 +358,7 @@ func (a *App) linear(ctx context.Context, s widgetdata.Settings, fresh bool) (an
 			ConnectorAvailable bool          `json:"connectorAvailable"`
 			Issues             []LinearIssue `json:"issues"`
 		}
-		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: linearSchema, AllowedTools: linearReadTools, DisallowedTools: linearWriteTools}, &out)
+		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: linearSchema, AllowedTools: linearReadTools, DisallowedTools: connectorWriteTools}, &out)
 		if err != nil {
 			return nil, err
 		}
@@ -360,9 +370,7 @@ func (a *App) linear(ctx context.Context, s widgetdata.Settings, fresh bool) (an
 				out.Issues[i].URL = ""
 			}
 		}
-		if out.Issues == nil {
-			out.Issues = []LinearIssue{}
-		}
+		out.Issues = groupLinearIssues(out.Issues)
 		return LinearData{Issues: out.Issues, FetchedAt: time.Now(), CostUSD: cost}, nil
 	})
 }
@@ -390,7 +398,7 @@ func (a *App) notion(ctx context.Context, s widgetdata.Settings, fresh bool) (an
 			ConnectorAvailable bool         `json:"connectorAvailable"`
 			Pages              []NotionPage `json:"pages"`
 		}
-		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: notionSchema, AllowedTools: notionReadTools, DisallowedTools: notionWriteTools}, &out)
+		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: notionSchema, AllowedTools: notionReadTools, DisallowedTools: connectorWriteTools}, &out)
 		if err != nil {
 			return nil, err
 		}
@@ -521,7 +529,8 @@ func linksWidget(s widgetdata.Settings) LinksData {
 // LinearNotification is one inbox entry reported through the Linear connector.
 type LinearNotification struct {
 	ID        string `json:"id"`
-	Kind      string `json:"kind"` // mention, assigned, comment, status, ...
+	Type      string `json:"type"` // Linear's own type, e.g. issueCommentMention
+	Kind      string `json:"kind"` // mention, assigned, comment, status, review (set here)
 	Title     string `json:"title"`
 	Actor     string `json:"actor"`
 	CreatedAt string `json:"createdAt"`
@@ -538,26 +547,30 @@ type LinearInboxData struct {
 }
 
 var linearInboxSchema = json.RawMessage(`{"type":"object","properties":{"connectorAvailable":{"type":"boolean"},
-"notifications":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string"},
+"myIssues":{"type":"array","items":{"type":"string"}},
+"notifications":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"type":{"type":"string"},
 "title":{"type":"string"},"actor":{"type":"string"},"createdAt":{"type":"string"},"read":{"type":"boolean"},
-"url":{"type":"string"}},"required":["id","title"]}}},"required":["connectorAvailable","notifications"]}`)
+"url":{"type":"string"}},"required":["id","type","title","url"]}}},"required":["connectorAvailable","myIssues","notifications"]}`)
 
 func (a *App) linearInbox(ctx context.Context, s widgetdata.Settings, fresh bool) (any, error) {
 	unreadOnly := s.Bool("unreadOnly", true)
-	prompt := "Using the Linear MCP tools, list my most recent Linear notifications (at most 30), newest first."
+	// Claude only fetches; which notifications concern me is decided here.
+	prompt := "Using the Linear MCP tools: 1) call list_issues once with assignee \"me\", limit 250 and fields [\"id\"]," +
+		" and put every identifier (like GRO-123) in myIssues. 2) Call get_notifications once with limit 50"
 	if unreadOnly {
-		prompt += " Include only unread notifications."
+		prompt += " and unreadOnly true"
 	}
-	prompt += " For each give id, kind (mention, assigned, comment, status, review, other), a short title naming the issue," +
-		" the actor, createdAt, whether it is read, and the issue url. Set connectorAvailable to false if no Linear tools" +
-		" are available. Do not mark anything as read and do not change anything in Linear."
+	prompt += ". Return every notification unchanged: id, its exact type field, title, the actor, createdAt, whether it is" +
+		" read, and its url. Set connectorAvailable to false if no Linear tools are available. Do not mark anything as" +
+		" read and do not change anything in Linear."
 	key := fmt.Sprintf("linear-inbox:%v", unreadOnly)
 	return a.cachedAsk(key, fresh, func() (any, error) {
 		var out struct {
 			ConnectorAvailable bool                 `json:"connectorAvailable"`
+			MyIssues           []string             `json:"myIssues"`
 			Notifications      []LinearNotification `json:"notifications"`
 		}
-		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: linearInboxSchema, AllowedTools: linearInboxTools, DisallowedTools: linearWriteTools}, &out)
+		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: linearInboxSchema, AllowedTools: linearInboxTools, DisallowedTools: connectorWriteTools}, &out)
 		if err != nil {
 			return nil, err
 		}
@@ -565,7 +578,7 @@ func (a *App) linearInbox(ctx context.Context, s widgetdata.Settings, fresh bool
 			return nil, errNoConnector
 		}
 		d := LinearInboxData{Notifications: []LinearNotification{}, FetchedAt: time.Now(), CostUSD: cost}
-		for _, n := range out.Notifications {
+		for _, n := range filterMyNotifications(out.Notifications, out.MyIssues) {
 			if !linearURL.MatchString(n.URL) {
 				n.URL = ""
 			}

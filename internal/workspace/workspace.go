@@ -27,7 +27,15 @@ type Workspace struct {
 	Folders []string          `json:"folders"`
 	Widgets []widget.Instance `json:"widgets"`
 	Notes   string            `json:"notes,omitempty"`
+	// Topics steer the office guide's reading suggestions (e.g. next, react);
+	// empty means it goes by what the folders contain.
+	Topics []string `json:"topics,omitempty"`
 }
+
+const maxTopics = 10
+
+// topicPattern is one short word: letters (any script), digits, . + # -.
+var topicPattern = regexp.MustCompile(`^[\p{L}\p{N}.+#-]{1,20}$`)
 
 // Validate checks the workspace and every widget instance in it.
 func (w Workspace) Validate() error {
@@ -52,6 +60,14 @@ func (w Workspace) Validate() error {
 			return fmt.Errorf("workspace %s: duplicate folder %q", w.ID, folder)
 		}
 		seen[key] = true
+	}
+	if len(w.Topics) > maxTopics {
+		return fmt.Errorf("workspace %s: at most %d guide topics", w.ID, maxTopics)
+	}
+	for _, t := range w.Topics {
+		if !topicPattern.MatchString(t) {
+			return fmt.Errorf("workspace %s: guide topic %q must be one short word", w.ID, t)
+		}
 	}
 	keys := make(map[string]bool, len(w.Widgets))
 	for i, inst := range w.Widgets {

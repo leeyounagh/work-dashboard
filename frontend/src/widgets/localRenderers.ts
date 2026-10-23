@@ -1,4 +1,5 @@
 import { h, link, type OpenURL } from './renderers';
+import { searchableList } from './search';
 
 /** Things a widget can do besides showing data. */
 export interface WidgetActions {
@@ -12,24 +13,29 @@ interface FolderFilesData {
   folder: string;
   files: Array<{ name: string; modified: string; size: number }> | null;
   total: number;
+  limit: number;
 }
 
 export function renderFolderFiles(d: FolderFilesData, actions?: WidgetActions): HTMLElement {
-  const box = h('div', 'w-list');
   const files = d.files ?? [];
-  box.append(h('div', 'w-summary', files.length < d.total ? `${d.total}개 중 ${files.length}개` : `${files.length}개`));
-  if (!files.length) box.append(h('p', 'muted small', '이 폴더에 보여 줄 문서가 없습니다.'));
-  for (const f of files) {
-    const row = h('div', 'w-meta');
-    const name = h('button', 'w-file w-link', f.name);
-    name.type = 'button';
-    name.title = `${d.folder}\\${f.name} — 누르면 기본 앱으로 엽니다`;
-    name.disabled = !actions?.openFile;
-    name.addEventListener('click', () => actions?.openFile?.(f.name));
-    row.append(name, h('span', 'muted', dateText(f.modified)));
-    box.append(row);
-  }
-  return box;
+  if (!files.length) return h('p', 'muted small', '이 폴더에 보여 줄 문서가 없습니다.');
+  return searchableList({
+    key: `folder:${d.folder}`,
+    items: files,
+    text: (f) => f.name,
+    limit: d.limit || 20,
+    placeholder: '문서 이름 검색 (여러 단어는 모두 포함)',
+    row: (f) => {
+      const row = h('div', 'w-meta');
+      const name = h('button', 'w-file w-link', f.name);
+      name.type = 'button';
+      name.title = `${d.folder}\\${f.name} — 누르면 기본 앱으로 엽니다`;
+      name.disabled = !actions?.openFile;
+      name.addEventListener('click', () => actions?.openFile?.(f.name));
+      row.append(name, h('span', 'muted', dateText(f.modified)));
+      return row;
+    },
+  });
 }
 
 interface WorktreesData {
@@ -56,7 +62,7 @@ interface DeployData {
 }
 
 interface LinearData {
-  issues: Array<{ id: string; title: string; state: string; team: string; url: string; priority: string }>;
+  issues: Array<{ id: string; title: string; state: string; group?: string; team: string; url: string; priority: string }> | null;
   fetchedAt: string;
   costUsd: number;
 }
@@ -143,11 +149,21 @@ export function renderDeploy(d: DeployData, open: OpenURL): HTMLElement {
   return box;
 }
 
+const LINEAR_GROUP: Record<string, string> = { todo: '할 일', doing: '진행 중', review: '리뷰·확인 중' };
+
 export function renderLinear(d: LinearData, open: OpenURL): HTMLElement {
   const box = h('div', 'w-list');
   const issues = d.issues ?? [];
   if (!issues.length) box.append(h('p', 'muted small', '진행 중인 내 이슈가 없습니다.'));
+  let section = '';
   for (const is of issues) {
+    // The backend sorts by group: what I have to do, doing, waiting on review/test.
+    const group = is.group ?? '';
+    if (group && group !== section) {
+      section = group;
+      const count = issues.filter((x) => x.group === group).length;
+      box.append(h('h4', 'w-section', `${LINEAR_GROUP[group] ?? group} ${count}`));
+    }
     const item = h('div', 'w-item');
     const title = h('div', 'w-pr-title');
     title.append(is.url ? link(is.id, is.url, open, 'w-link w-pr-num') : h('span', 'w-pr-num', is.id), h('span', 'w-pr-text', is.title));
@@ -163,17 +179,25 @@ export function renderLinear(d: LinearData, open: OpenURL): HTMLElement {
 
 export function renderNotion(d: NotionData, open: OpenURL): HTMLElement {
   const box = h('div', 'w-list');
-  for (const p of d.pages ?? []) {
-    const item = h('div', 'w-item');
-    const title = h('div', 'w-pr-title');
-    title.append(p.url ? link(p.title || p.id, p.url, open, 'w-link') : h('span', '', p.title || p.id));
-    const meta = h('div', 'w-meta');
-    if (p.version) meta.append(h('span', 'w-chip ok', p.version));
-    if (p.lastEdited) meta.append(h('span', 'muted', `수정 ${dateText(p.lastEdited) || p.lastEdited}`));
-    item.append(title, meta);
-    box.append(item);
-  }
-  box.append(costNote(d.fetchedAt, d.costUsd));
+  box.append(
+    searchableList({
+      key: 'notion-specs',
+      items: d.pages ?? [],
+      text: (p) => `${p.title} ${p.version ?? ''}`,
+      placeholder: '명세 제목 검색',
+      row: (p) => {
+        const item = h('div', 'w-item');
+        const title = h('div', 'w-pr-title');
+        title.append(p.url ? link(p.title || p.id, p.url, open, 'w-link') : h('span', '', p.title || p.id));
+        const meta = h('div', 'w-meta');
+        if (p.version) meta.append(h('span', 'w-chip ok', p.version));
+        if (p.lastEdited) meta.append(h('span', 'muted', `수정 ${dateText(p.lastEdited) || p.lastEdited}`));
+        item.append(title, meta);
+        return item;
+      },
+    }),
+    costNote(d.fetchedAt, d.costUsd),
+  );
   return box;
 }
 
@@ -196,13 +220,21 @@ export function renderQA(d: QAData, actions?: WidgetActions): HTMLElement {
     box.append(row);
   }
   if (d.reports.length) {
-    box.append(h('div', 'w-summary', '최근 보고서'));
-    for (const r of d.reports) {
-      const item = h('div', 'w-meta');
-      item.title = r.path;
-      item.append(h('span', '', r.name), h('span', 'muted', dateText(r.modified)));
-      box.append(item);
-    }
+    box.append(
+      h('h4', 'w-section', '최근 보고서'),
+      searchableList({
+        key: `qa-reports:${d.domain}`,
+        items: d.reports,
+        text: (r) => r.name,
+        placeholder: '보고서 검색',
+        row: (r) => {
+          const item = h('div', 'w-meta');
+          item.title = r.path;
+          item.append(h('span', '', r.name), h('span', 'muted', dateText(r.modified)));
+          return item;
+        },
+      }),
+    );
   }
   return box;
 }

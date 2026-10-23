@@ -25,8 +25,12 @@ type FolderFile struct {
 type FolderFilesData struct {
 	Folder string       `json:"folder"`
 	Files  []FolderFile `json:"files"`
-	Total  int          `json:"total"` // matching files before the limit
+	Total  int          `json:"total"` // matching files in the folder
+	Limit  int          `json:"limit"` // how many to show when not searching
 }
+
+// maxFolderFiles caps what is sent to the page (and searched there).
+const maxFolderFiles = 1000
 
 // Only documents are listed and opened: opening anything else with its
 // default app may run code (.exe, .lnk, .chm, .py, ...), so this is an
@@ -103,8 +107,9 @@ func folderFiles(s widgetdata.Settings) (FolderFilesData, error) {
 	}
 	sort.SliceStable(d.Files, func(i, j int) bool { return d.Files[i].Modified.After(d.Files[j].Modified) })
 	d.Total = len(d.Files)
-	if limit := max(1, s.Int("limit", 20)); len(d.Files) > limit {
-		d.Files = d.Files[:limit]
+	d.Limit = max(1, s.Int("limit", 20))
+	if len(d.Files) > maxFolderFiles {
+		d.Files = d.Files[:maxFolderFiles]
 	}
 	return d, nil
 }

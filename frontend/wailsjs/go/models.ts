@@ -209,6 +209,22 @@ export namespace main {
 	        this.version = source["version"];
 	    }
 	}
+	export class Article {
+	    name: string;
+	    url: string;
+	    tech: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Article(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.url = source["url"];
+	        this.tech = source["tech"];
+	    }
+	}
 	export class ClaudeUsageData {
 	    login: claudeacct.Login;
 	    usage: claudeacct.Usage;
@@ -492,6 +508,7 @@ export namespace workspace {
 	    folders: string[];
 	    widgets: widget.Instance[];
 	    notes?: string;
+	    topics?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Workspace(source);
@@ -504,6 +521,7 @@ export namespace workspace {
 	        this.folders = source["folders"];
 	        this.widgets = this.convertValues(source["widgets"], widget.Instance);
 	        this.notes = source["notes"];
+	        this.topics = source["topics"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

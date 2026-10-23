@@ -27,7 +27,9 @@ type Request struct {
 	AllowedTools    []string
 	DisallowedTools []string // a second line of defense (write tools by name)
 	Model           string   // default "haiku": cheap and fast enough for lookups
-	NoMCP           bool     // load no MCP servers or connectors (plain questions)
+	// NoMCP is for plain questions: no MCP servers or connectors and no
+	// user/local settings (so no allow rules of the user's) at all.
+	NoMCP bool
 }
 
 // maxBudgetUSD caps one lookup's cost.
@@ -75,14 +77,15 @@ func Args(r Request) []string {
 		"--json-schema", string(r.Schema),
 		"--no-session-persistence",
 		"--tools", "", // no Bash/Read/Write/...: only the allowed MCP tools exist
-		// Only project settings, and the ask folder has none: the user's own
-		// allow rules (which dontAsk would honour) are not loaded.
-		"--setting-sources", "project",
-		"--permission-mode", "dontAsk", // anything not allowed here is denied
+		// Not prompting; tools not allowed here are denied. The user's own allow
+		// rules still apply, so connector lookups also pass DisallowedTools.
+		"--permission-mode", "dontAsk",
 		"--max-budget-usd", maxBudgetUSD,
 	}
 	if r.NoMCP {
-		args = append(args, "--strict-mcp-config") // with no --mcp-config: no servers at all
+		// Connector lookups need user settings (claude.ai connectors did not
+		// load without them when started from the desktop), questions do not.
+		args = append(args, "--setting-sources", "project", "--strict-mcp-config")
 	}
 	if len(r.AllowedTools) > 0 {
 		args = append(args, "--allowedTools", strings.Join(r.AllowedTools, ","))

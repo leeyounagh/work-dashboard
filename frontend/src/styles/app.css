@@ -307,3 +307,4 @@ body.resizing-col .tab-pane, body.resizing-row .tab-pane, body.resizing-col canv
 /* Native controls (checkboxes, radios) use the accent too. */
 :root { accent-color: var(--accent); }
 .w-manage-row > button { flex-shrink: 0; white-space: nowrap; }
+.w-search { width: 100%; margin-bottom: 6px; }
