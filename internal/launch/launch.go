@@ -77,7 +77,9 @@ func resolveShim(shim string) (string, bool) {
 	if m == nil {
 		return "", false
 	}
-	exe := filepath.Join(filepath.Dir(shim), filepath.FromSlash(string(m[1])))
+	// The shim always uses backslashes; normalise so this also works off Windows.
+	rel := strings.ReplaceAll(string(m[1]), `\`, "/")
+	exe := filepath.Join(filepath.Dir(shim), filepath.FromSlash(rel))
 	if info, err := os.Stat(exe); err != nil || info.IsDir() {
 		return "", false
 	}
