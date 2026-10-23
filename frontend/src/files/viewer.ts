@@ -111,7 +111,7 @@ export class FileViewer {
   ) {}
 
   /** Opens (or focuses) a file tab. With focus=false the current tab stays in front. */
-  async open(path: string, focus = true): Promise<void> {
+  async open(path: string, focus = true, group?: string): Promise<void> {
     const id = fileTabId(path);
     const inFlight = this.pending.get(id);
     if (inFlight) {
@@ -123,12 +123,12 @@ export class FileViewer {
       if (focus) this.tabs.activate(id);
       return;
     }
-    const p = this.load(id, path, focus).finally(() => this.pending.delete(id));
+    const p = this.load(id, path, focus, group).finally(() => this.pending.delete(id));
     this.pending.set(id, p);
     await p;
   }
 
-  private async load(id: string, path: string, focus: boolean): Promise<void> {
+  private async load(id: string, path: string, focus: boolean, group?: string): Promise<void> {
     let content;
     try {
       content = await ReadFile(path);
@@ -189,6 +189,7 @@ export class FileViewer {
         title: baseName(path),
         tooltip: path,
         kind: 'file',
+        group,
         pane,
         onActivate: () => viewer.view.focus(),
         onClose: () => this.close(id),

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/leeyounagh/work-dashboard/internal/files"
 )
@@ -52,4 +54,24 @@ func (a *App) FileDiff(path string) (string, error) {
 		return "", fmt.Errorf("변경 내용을 가져오지 못했습니다: %w", err)
 	}
 	return d, nil
+}
+
+// searchLimit and searchTimeout keep file search responsive in big repos.
+const (
+	searchLimit   = 100
+	searchTimeout = 3 * time.Second
+)
+
+// SearchFiles finds files by name or path in a workspace's folders.
+func (a *App) SearchFiles(workspaceID, query string) (files.SearchResult, error) {
+	if err := a.unlocked(); err != nil {
+		return files.SearchResult{}, err
+	}
+	ws, err := a.loadWorkspace(workspaceID)
+	if err != nil {
+		return files.SearchResult{}, err
+	}
+	ctx, cancel := context.WithTimeout(a.life, searchTimeout)
+	defer cancel()
+	return files.Search(ctx, files.NewGuard(ws.Folders), ws.Folders, query, searchLimit)
 }

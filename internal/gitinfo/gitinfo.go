@@ -27,7 +27,10 @@ type Worktree struct {
 }
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := procutil.Background(exec.CommandContext(ctx, "git", append([]string{"-c", "core.fsmonitor=false", "-C", dir}, args...)...))
+	// --no-optional-locks: refreshing must never leave index.lock in the way of
+	// the user's own git commands.
+	cmd := procutil.Background(exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks", "-c", "core.fsmonitor=false", "-C", dir}, args...)...))
+	cmd.WaitDelay = procutil.WaitDelay
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError

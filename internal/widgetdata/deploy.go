@@ -31,6 +31,8 @@ type DeployData struct {
 	Unknown  int         `json:"unknown"`
 	Text     string      `json:"text,omitempty"`
 	ExitCode int         `json:"exitCode"`
+	// Truncated: the command printed more than the widget keeps.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 type deploySlot struct {

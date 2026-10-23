@@ -73,3 +73,55 @@ describe('TabHost', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('TabHost groups', () => {
+  it('shows only the current workspace tabs and returns to its last tab', () => {
+    host.add(tab('gw-1', { group: 'gw' }));
+    host.add(tab('gw-2', { group: 'gw' }));
+    host.activate('gw-1');
+    host.setGroup('ship');
+    expect(host.activeId).toBeNull();
+    expect(changes.at(-1)).toBeNull();
+    host.add(tab('ship-1', { group: 'ship' }));
+    expect(host.activeId).toBe('ship-1');
+    const shown = [...strip.children].filter((e) => !e.classList.contains('hidden'));
+    expect(shown).toHaveLength(1);
+    host.setGroup('gw');
+    expect(host.activeId).toBe('gw-1');
+  });
+
+  it('keeps tabs opened for another workspace in the background', () => {
+    host.setGroup('gw');
+    host.add(tab('gw-1', { group: 'gw' }));
+    host.add(tab('other', { group: 'ship' }));
+    expect(host.activeId).toBe('gw-1');
+    host.activate('other'); // not visible: ignored
+    expect(host.activeId).toBe('gw-1');
+  });
+});
+
+describe('TabHost rename', () => {
+  it('renames inline on Enter when the callback accepts', async () => {
+    const onRename = vi.fn(async () => true);
+    host.add(tab('a', { kind: 'claude', onRename }));
+    host.startRename('a');
+    const input = strip.querySelector('input')!;
+    input.value = '휴가 기능';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onRename).toHaveBeenCalledWith('휴가 기능');
+    expect(strip.querySelector('.term-tab-label')!.textContent).toBe('휴가 기능');
+  });
+
+  it('keeps the old name on Escape or when the callback refuses', async () => {
+    host.add(tab('a', { kind: 'claude', onRename: async () => false }));
+    host.startRename('a');
+    const input = strip.querySelector('input')!;
+    input.value = 'x';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(strip.querySelector('.term-tab-label')!.textContent).toBe('a');
+  });
+});

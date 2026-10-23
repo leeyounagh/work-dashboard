@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/leeyounagh/work-dashboard/internal/procutil"
@@ -49,6 +50,15 @@ func Split(line string) ([]string, error) {
 	return args, nil
 }
 
+// errBatch: Go hands .cmd/.bat arguments to cmd.exe parsing, where & | % act
+// even though no shell is used. Refusing them keeps "no shell" true.
+var errBatch = errors.New("배치 파일(.cmd/.bat)은 실행하지 않습니다. node.exe, pwsh.exe 처럼 실행 파일을 직접 지정하세요")
+
+func isBatch(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	return ext == ".cmd" || ext == ".bat"
+}
+
 // Output is what a command printed.
 type Output struct {
 	Stdout    string `json:"stdout"`
@@ -83,8 +93,15 @@ func Run(ctx context.Context, dir, line string) (Output, error) {
 	if err != nil {
 		return Output{}, err
 	}
+	if isBatch(args[0]) {
+		return Output{}, errBatch
+	}
+	if resolved, err := exec.LookPath(args[0]); err == nil && isBatch(resolved) {
+		return Output{}, errBatch
+	}
 	cmd := procutil.Background(exec.CommandContext(ctx, args[0], args[1:]...))
 	cmd.Dir = dir
+	cmd.WaitDelay = procutil.WaitDelay
 	var stdout, stderr capped
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err = cmd.Run()

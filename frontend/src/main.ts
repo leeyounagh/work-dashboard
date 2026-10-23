@@ -5,6 +5,7 @@ import {
   DeleteWorkspace,
   PickFolder,
   RestorableSessions,
+  SearchFiles,
   SaveWorkspace,
   WidgetCatalog,
   Workspaces,
@@ -37,7 +38,7 @@ function saveWorkspaceOrder(ids: string[]) {
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
-import { mountFloor } from './office/floor';
+import { Office } from './office/office';
 import { mountSplitters } from './layout/splitters';
 import { TabHost } from './tabs/tabHost';
 import { TerminalPanel, type TerminalKind } from './terminal/panel';
@@ -56,14 +57,49 @@ function byId<T extends HTMLElement>(id: string): T {
   return node as T;
 }
 
-function startFloor(): (() => void) | undefined {
+interface AgentEvent {
+  termId: string;
+  event: string;
+  tool?: string;
+  message?: string;
+}
+
+/**
+ * The pixel office: one character per terminal, animated by Claude hooks.
+ * Clicking a character brings its terminal tab to the front.
+ */
+function startOffice(
+  panel: TerminalPanel,
+  tabs: TabHost,
+  current: () => Workspace | null,
+): { stop: () => void; refresh: () => void } | undefined {
+  let office: Office;
   try {
-    return mountFloor(byId<HTMLCanvasElement>('floor'));
+    office = new Office(byId<HTMLCanvasElement>('floor'), (termId) => tabs.activate(termId));
   } catch (err) {
-    // The floor is decorative; the rest of the dashboard should still load.
-    console.error('office floor failed to start', err);
+    // The office is decorative; the rest of the dashboard should still load.
+    console.error('office failed to start', err);
     return undefined;
   }
+  // Only the selected workspace's terminals are in the office.
+  const refresh = () => {
+    const ws = current();
+    office.sync(
+      panel
+        .list()
+        .filter((t) => ws && t.workspaceId === ws.id)
+        .map(({ id, title, kind, alive }) => ({ id, title, kind, alive, workspace: ws?.name ?? '' })),
+    );
+  };
+  panel.onChange(refresh);
+  const off = EventsOn('agent:event', (ev: AgentEvent) => office.event(ev.termId, ev));
+  return {
+    refresh,
+    stop: () => {
+      off();
+      office.destroy();
+    },
+  };
 }
 
 let toastTimer = 0;
@@ -82,6 +118,42 @@ interface FilesEvent {
   workspaceId: string;
   paths: string[];
   tool?: string;
+}
+
+/** Search box above the file tree: debounced, newest query wins, Esc clears. */
+function wireFileSearch(input: HTMLInputElement, tree: FileTree, current: () => Workspace | null) {
+  let timer = 0;
+  let ticket = 0;
+  const run = async () => {
+    const query = input.value.trim();
+    const ws = current();
+    const mine = ++ticket;
+    if (!query || !ws?.id) {
+      tree.showResults(null);
+      return;
+    }
+    try {
+      const res = await SearchFiles(ws.id, query);
+      if (mine === ticket) tree.showResults({ entries: res.entries, truncated: res.truncated, query });
+    } catch (err) {
+      if (mine === ticket) toast(String(err));
+    }
+  };
+  input.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => void run(), 250);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      input.value = '';
+      void run();
+    }
+  });
+  // A different workspace starts with an empty search.
+  return () => {
+    input.value = '';
+    void run();
+  };
 }
 
 /** What the terminal buttons act on: the saved workspace, and whether it has unsaved edits. */
@@ -251,45 +323,50 @@ function wireTerminalButtons(panel: TerminalPanel, getSelection: () => Selection
  * Reopens Claude sessions that were running when the app last exited, for
  * workspaces whose session-restore widget allows it.
  */
+const MAX_RESTORE = 5;
+
 async function restoreSessions(panel: TerminalPanel, list: Workspace[]) {
-  let restorable;
   try {
-    restorable = await RestorableSessions();
-  } catch {
-    return;
-  }
-  for (const rec of restorable ?? []) {
-    const ws = list.find((w) => w.id === rec.workspaceId);
-    const widget = ws?.widgets.find((w) => w.type === 'session-restore');
-    if (!widget?.enabled || widget.settings?.resumeClaude === false) continue;
-    await panel.resume(rec.workspaceId, rec.sessionId);
+    const wanted = orEmpty(await RestorableSessions()).filter((rec) => {
+      const ws = list.find((w) => w.id === rec.workspaceId);
+      const widget = orEmpty(ws?.widgets).find((w) => w.type === 'session-restore');
+      return widget?.enabled && widget.settings?.resumeClaude !== false;
+    });
+    if (!wanted.length) return;
+    const batch = wanted.slice(0, MAX_RESTORE);
+    await Promise.all(batch.map((rec) => panel.resume(rec.workspaceId, rec.sessionId)));
+    const skipped = wanted.length - batch.length;
+    toast(`지난번에 열려 있던 Claude 세션 ${batch.length}개를 이어서 열었습니다${skipped ? ` (나머지 ${skipped}개는 「세션 복원」 위젯에서)` : ''}`);
+  } catch (err) {
+    // Restoring is a convenience; it must never stop the dashboard from starting.
+    console.error('session restore failed', err);
   }
 }
 
 async function start() {
   const stopSplitters = mountSplitters(byId('app'));
   import.meta.hot?.dispose(stopSplitters);
-  const stopFloor = startFloor();
-  import.meta.hot?.dispose(() => stopFloor?.());
-
   let selection: Selection = { workspace: null, dirty: false };
   const editorBody = byId('editor-body');
   const emptyNote = byId('editor-empty');
   const tabs = new TabHost(byId('editor-tabs'), editorBody, (active) => emptyNote.classList.toggle('hidden', active !== null));
   const panel = new TerminalPanel(tabs, editorBody, toast);
+  const office = startOffice(panel, tabs, () => selection.workspace);
+  import.meta.hot?.dispose(() => office?.stop());
   const viewer = new FileViewer(tabs, toast);
   import.meta.hot?.dispose(() => {
     panel.dispose();
     viewer.dispose();
   });
-  const tree = new FileTree(byId('file-tree'), (path) => void viewer.open(path));
+  const tree = new FileTree(byId('file-tree'), (path) => void viewer.open(path, true, selection.workspace?.id));
+  const resetSearch = wireFileSearch(byId<HTMLInputElement>('file-search'), tree, () => selection.workspace);
 
   // Claude (via the dashboard MCP tool) asked to show files: list them and open
   // tabs. Only bring the first one to the front when it is the workspace in view.
   const offOpen = EventsOn('files:open', (ev: FilesEvent) => {
     tree.opened(ev.workspaceId, ev.paths);
     const inView = ev.workspaceId === selection.workspace?.id;
-    ev.paths.forEach((p, i) => void viewer.open(p, inView && i === 0));
+    ev.paths.forEach((p, i) => void viewer.open(p, inView && i === 0, ev.workspaceId));
   });
   const offSeen = EventsOn('files:seen', (ev: FilesEvent) => {
     for (const p of ev.paths) tree.seen(ev.workspaceId, p, ev.tool ?? '');
@@ -302,9 +379,18 @@ async function start() {
   const updateButtons = wireTerminalButtons(panel, () => selection);
   // eslint-disable-next-line prefer-const -- assigned after the controller that calls back into it
   let board: WidgetBoard;
+  let shownGroup: string | null | undefined;
   const workspaces = createWorkspaceController((next) => {
     selection = next;
     updateButtons();
+    // Terminals and files belong to the workspace that opened them.
+    const group = next.workspace?.id ?? null;
+    if (group !== shownGroup) {
+      shownGroup = group;
+      tabs.setGroup(group);
+      office?.refresh();
+      resetSearch();
+    }
     tree.show(next.workspace); // re-renders only when the workspace or its folders changed
     board?.show(next.workspace);
   });

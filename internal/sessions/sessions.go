@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -22,6 +23,12 @@ const (
 	maxTitle   = 80
 )
 
+var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,63}$`)
+
+// ValidID reports whether id is safe to pass after --resume and to use in a
+// file name (no leading dash, no path characters).
+func ValidID(id string) bool { return idPattern.MatchString(id) }
+
 // Record is one Claude session.
 type Record struct {
 	SessionID   string    `json:"sessionId"`
@@ -29,7 +36,8 @@ type Record struct {
 	Title       string    `json:"title"` // first prompt, shortened
 	StartedAt   time.Time `json:"startedAt"`
 	LastActive  time.Time `json:"lastActive"`
-	Open        bool      `json:"open"` // running (or running when the app last exited)
+	Open        bool      `json:"open"`            // running (or running when the app last exited)
+	Named       bool      `json:"named,omitempty"` // Title was set by the user
 }
 
 // Store keeps records in one JSON file.
@@ -55,7 +63,13 @@ func (s *Store) load() ([]Record, error) {
 	if err := json.Unmarshal(data, &recs); err != nil {
 		return nil, fmt.Errorf("parse sessions: %w", err)
 	}
-	return recs, nil
+	valid := recs[:0]
+	for _, r := range recs {
+		if ValidID(r.SessionID) {
+			valid = append(valid, r)
+		}
+	}
+	return valid, nil
 }
 
 func (s *Store) save(recs []Record) error {
@@ -121,7 +135,7 @@ func shorten(text string) string {
 func (s *Store) Touch(id, prompt string, at time.Time) error {
 	return s.update(id, func(r *Record) {
 		r.LastActive = at
-		if r.Title == "" && prompt != "" {
+		if r.Title == "" && prompt != "" && !r.Named {
 			r.Title = shorten(prompt)
 		}
 	})
@@ -189,4 +203,12 @@ func (s *Store) TakeOpenAtExit() ([]Record, error) {
 		return nil, nil
 	}
 	return open, s.save(recs)
+}
+
+// Rename sets a user-chosen title; later prompts no longer replace it.
+func (s *Store) Rename(id, title string) error {
+	return s.update(id, func(r *Record) {
+		r.Title = shorten(title)
+		r.Named = true
+	})
 }

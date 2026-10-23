@@ -22,6 +22,11 @@ describe('clipboardAction', () => {
     expect(clipboardAction(key('C', { ctrl: true, shift: true }), true)).toBe('copy');
   });
 
+  it('uses the physical key when an IME changes e.key', () => {
+    expect(clipboardAction({ ...key('ㅍ', { ctrl: true }), code: 'KeyV' }, false)).toBe('paste');
+    expect(clipboardAction({ ...key('ㅊ', { ctrl: true }), code: 'KeyC' }, true)).toBe('copy');
+  });
+
   it('ignores other keys and key-ups', () => {
     expect(clipboardAction(key('v'), false)).toBeNull();
     expect(clipboardAction(key('v', { ctrl: true, alt: true }), false)).toBeNull();

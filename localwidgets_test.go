@@ -27,7 +27,7 @@ func localHarness(t *testing.T, widgets ...widget.Instance) (*harness, workspace
 	h.app.deps.Ask = func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		calls.Add(1)
 		lastArgs = args
-		if slices.Contains(args, "mcp__linear") {
+		if strings.Contains(strings.Join(args, " "), "mcp__linear__") {
 			return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":true,"issues":[{"id":"GRO-1","title":"t","state":"In Review","url":"https://linear.app/x/GRO-1"}]},"total_cost_usd":0.02}`), nil
 		}
 		return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":true,"pages":[{"id":"p","title":"근태 명세","version":"Ver 1.2.0"}]},"total_cost_usd":0.01}`), nil
@@ -79,6 +79,39 @@ func TestConnectorInputsAreValidated(t *testing.T) {
 	}
 }
 
+func TestConnectorFailuresAreCached(t *testing.T) {
+	h, ws, calls, _ := localHarness(t, widget.Instance{Type: widget.LinearIssues, Enabled: true})
+	h.app.deps.Ask = func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+		calls.Add(1)
+		return []byte(`{"is_error":true,"result":"rate limited"}`), nil
+	}
+	for range 3 {
+		if res := h.app.WidgetData(ws.ID, 0); res.Error == "" {
+			t.Fatal("expected error")
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("calls = %d; a failing lookup costs usage and must not be retried on every refresh", calls.Load())
+	}
+	h.app.RefreshWidget(ws.ID, 0)
+	if calls.Load() != 2 {
+		t.Fatal("an explicit refresh retries")
+	}
+}
+
+func TestConnectorLinksAreChecked(t *testing.T) {
+	h, ws, _, _ := localHarness(t, widget.Instance{Type: widget.LinearIssues, Enabled: true})
+	h.app.deps.Ask = func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+		return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":true,"issues":[
+			{"id":"GRO-1","title":"ok","state":"s","url":"https://linear.app/x/issue/GRO-1"},
+			{"id":"GRO-2","title":"phish","state":"s","url":"https://linear.app.evil.example/GRO-2"}]}}`), nil
+	}
+	d := h.app.WidgetData(ws.ID, 0).Data.(LinearData)
+	if d.Issues[0].URL == "" || d.Issues[1].URL != "" {
+		t.Fatalf("issues = %+v", d.Issues)
+	}
+}
+
 func TestNotionWidget(t *testing.T) {
 	h, ws, _, args := localHarness(t, widget.Instance{Type: widget.NotionSpecs, Enabled: true,
 		Settings: map[string]any{"pages": []any{"3d5719ab-06c8-8155-a7d3-e4ccff619f89"}}})
@@ -89,7 +122,7 @@ func TestNotionWidget(t *testing.T) {
 	if d := res.Data.(NotionData); len(d.Pages) != 1 || d.Pages[0].Version != "Ver 1.2.0" {
 		t.Fatalf("notion = %+v", d)
 	}
-	if !slices.Contains(*args, "mcp__claude_ai_Notion,mcp__notion") {
+	if !slices.Contains(*args, "mcp__claude_ai_Notion__notion-fetch") {
 		t.Fatalf("args = %q", *args)
 	}
 }
@@ -260,5 +293,46 @@ func TestDeployEmptyOutputIsAnError(t *testing.T) {
 	h, ws, _, _ := localHarness(t, widget.Instance{Type: widget.DeploySwap, Enabled: true, Settings: map[string]any{"command": cmd}})
 	if res := h.app.WidgetData(ws.ID, 0); !strings.Contains(res.Error, "출력") {
 		t.Fatalf("res = %+v", res)
+	}
+}
+
+func TestRenameTerminal(t *testing.T) {
+	h, ws, _, _ := localHarness(t)
+	info, err := h.app.OpenClaude(ws.ID, 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.app.RenameTerminal(info.ID, "  근태 정정 기능  "); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.app.Terminals()[0].Title; got != "근태 정정 기능" {
+		t.Fatalf("title = %q", got)
+	}
+	rec, _, _ := h.app.deps.Sessions.Get("sess-1")
+	if rec.Title != "근태 정정 기능" {
+		t.Fatalf("session title = %q", rec.Title)
+	}
+	for _, bad := range []string{"", "   ", strings.Repeat("가", 61)} {
+		if err := h.app.RenameTerminal(info.ID, bad); err == nil {
+			t.Errorf("name %q should be rejected", bad)
+		}
+	}
+}
+
+func TestResumeRejectsFlagLikeIDs(t *testing.T) {
+	h, ws, _, _ := localHarness(t)
+	if _, err := h.app.ResumeClaude(ws.ID, "--dangerously-skip-permissions", 80, 24); err == nil {
+		t.Fatal("flag-like session ids must be rejected")
+	}
+}
+
+func TestRestorableIsReturnedOnce(t *testing.T) {
+	h, _, _, _ := localHarness(t)
+	h.app.deps.Restorable = []sessions.Record{{SessionID: "x", WorkspaceID: "w", Title: "t"}}
+	if got := h.app.RestorableSessions(); len(got) != 1 {
+		t.Fatalf("first call = %+v", got)
+	}
+	if got := h.app.RestorableSessions(); len(got) != 0 {
+		t.Fatalf("a page reload must not restore again: %+v", got)
 	}
 }

@@ -23,10 +23,20 @@ func fake(out string, err error, got *[]string, gotDir *string) Runner {
 }
 
 func TestArgs(t *testing.T) {
-	args := Args(Request{Prompt: "-list my issues", Schema: schema, AllowedTools: []string{"mcp__linear", "mcp__x"}})
+	args := Args(Request{
+		Prompt: "-list my issues", Schema: schema,
+		AllowedTools:    []string{"mcp__linear__list_issues", "mcp__linear__get_user"},
+		DisallowedTools: []string{"mcp__linear__save_issue"},
+	})
 	want := []string{
 		"-p", "--model", "haiku", "--output-format", "json", "--json-schema", string(schema),
-		"--no-session-persistence", "--allowedTools", "mcp__linear,mcp__x", "--", "-list my issues",
+		"--no-session-persistence",
+		// No built-in tools (Bash, Read, ...), and anything not allowed is denied
+		// instead of prompting, whatever the user's own allow rules say.
+		"--tools", "", "--permission-mode", "dontAsk", "--max-budget-usd", "0.25",
+		"--allowedTools", "mcp__linear__list_issues,mcp__linear__get_user",
+		"--disallowedTools", "mcp__linear__save_issue",
+		"--", "-list my issues",
 	}
 	if !slices.Equal(args, want) {
 		t.Fatalf("Args = %q\nwant  %q", args, want)
@@ -63,7 +73,9 @@ func TestAskErrors(t *testing.T) {
 		"is_error":      {out: `{"is_error":true,"result":"rate limited"}`, schema: schema, wantErr: "rate limited"},
 		"no structured": {out: `{"is_error":false,"structured_output":null}`, schema: schema, wantErr: "형식"},
 		"denied":        {out: `{"is_error":false,"permission_denials":[{"tool_name":"x"}]}`, schema: schema, wantErr: "커넥터"},
-		"bad schema":    {schema: json.RawMessage(`{`), wantErr: "schema"},
+		// A denied tool call makes any answer untrustworthy, even a structured one.
+		"denied with output": {out: `{"is_error":false,"structured_output":{"issues":[]},"permission_denials":[{"tool_name":"mcp__linear__save_issue"}]}`, schema: schema, wantErr: "save_issue"},
+		"bad schema":         {schema: json.RawMessage(`{`), wantErr: "schema"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

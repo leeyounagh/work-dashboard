@@ -42,6 +42,10 @@ export function RefreshWidget(arg1, arg2) {
   return window['go']['main']['App']['RefreshWidget'](arg1, arg2);
 }
 
+export function RenameTerminal(arg1, arg2) {
+  return window['go']['main']['App']['RenameTerminal'](arg1, arg2);
+}
+
 export function RestorableSessions() {
   return window['go']['main']['App']['RestorableSessions']();
 }
@@ -52,6 +56,10 @@ export function ResumeClaude(arg1, arg2, arg3, arg4) {
 
 export function SaveWorkspace(arg1) {
   return window['go']['main']['App']['SaveWorkspace'](arg1);
+}
+
+export function SearchFiles(arg1, arg2) {
+  return window['go']['main']['App']['SearchFiles'](arg1, arg2);
 }
 
 export function StartQA(arg1, arg2, arg3, arg4, arg5) {

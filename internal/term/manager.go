@@ -218,3 +218,15 @@ func (m *Manager) List() []Info {
 	}
 	return out
 }
+
+// Rename changes a session's title.
+func (m *Manager) Rename(id, title string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.sessions[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrNoSession, id)
+	}
+	s.info.Title = title
+	return nil
+}

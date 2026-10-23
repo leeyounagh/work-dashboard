@@ -29,6 +29,7 @@ export class FileTree {
   private readonly listings = new Map<string, files.Entry[] | Error>(); // by pathKey
   private frame = 0;
   private rendering = 0;
+  private results: { entries: files.Entry[]; truncated: boolean; query: string } | null = null;
 
   constructor(
     private readonly host: HTMLElement,
@@ -65,6 +66,12 @@ export class FileTree {
   seen(workspaceId: string, path: string, tool: string): void {
     this.states.set(workspaceId, addSeen(this.state(workspaceId), path, tool));
     if (this.workspace?.id === workspaceId) this.schedule();
+  }
+
+  /** Shows search results instead of the tree; null goes back to the tree. */
+  showResults(results: { entries: files.Entry[] | null; truncated: boolean; query: string } | null): void {
+    this.results = results ? { ...results, entries: results.entries ?? [] } : null;
+    this.schedule();
   }
 
   /** Drops cached folder listings, e.g. after files changed on disk. */
@@ -167,6 +174,13 @@ export class FileTree {
     const ticket = ++this.rendering;
     if (!ws?.id) {
       this.host.replaceChildren(node('p', 'muted', '워크스페이스를 선택하면 파일이 보입니다.'));
+      return;
+    }
+    if (this.results) {
+      const { entries, truncated, query } = this.results;
+      const rows = entries.map((e) => this.fileRow(e.path));
+      const note = truncated ? [node('p', 'muted small', `결과가 많아 ${entries.length}개까지만 보여 줍니다. 더 구체적으로 검색하세요.`)] : [];
+      this.host.replaceChildren(this.section(`「${query}」 검색 결과`, [...rows, ...note], '일치하는 파일이 없습니다.'));
       return;
     }
     // Load newly expanded folders level by level (children appear once parents load).

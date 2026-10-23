@@ -201,3 +201,15 @@ func TestRegistryRefusesLiveKey(t *testing.T) {
 		t.Fatalf("existing session was replaced: %+v", s)
 	}
 }
+
+func TestSearchFiles(t *testing.T) {
+	h := newHarness(t)
+	ws, _ := openTestClaude(t, h)
+	res, err := h.app.SearchFiles(ws.ID, "MAIN")
+	if err != nil || len(res.Entries) != 1 || res.Entries[0].Name != "main.go" {
+		t.Fatalf("SearchFiles = %+v, %v", res, err)
+	}
+	if _, err := h.app.SearchFiles("missing", "main"); err == nil {
+		t.Fatal("unknown workspace must fail")
+	}
+}

@@ -213,7 +213,7 @@ func (a *App) widgetData(workspaceID string, index int, fresh bool) WidgetResult
 		return res
 	}
 	s := widgetdata.Settings(resolved)
-	ctx, cancel := context.WithTimeout(context.Background(), widgetTimeout(inst.Type))
+	ctx, cancel := context.WithTimeout(a.life, widgetTimeout(inst.Type))
 	defer cancel()
 
 	data, err := a.buildWidget(ctx, ws, inst.Type, s, fresh)

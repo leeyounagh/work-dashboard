@@ -294,3 +294,20 @@ func (f *failingWait) Wait() error {
 	_ = f.fakeProcess.Wait()
 	return errors.New("exit status 1")
 }
+
+func TestRename(t *testing.T) {
+	m, _, _, _ := newTestManager(t)
+	info, err := m.Open(Spec{Name: "sh", Title: "Shell · x"}, 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Rename(info.ID, "빌드 감시"); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.List()[0].Title; got != "빌드 감시" {
+		t.Fatalf("title = %q", got)
+	}
+	if err := m.Rename("nope", "x"); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("err = %v", err)
+	}
+}

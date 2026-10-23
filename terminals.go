@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/leeyounagh/work-dashboard/internal/launch"
 	"github.com/leeyounagh/work-dashboard/internal/sessions"
@@ -82,6 +83,9 @@ func (a *App) ResumeClaude(workspaceID, sessionID string, cols, rows int) (term.
 	if a.deps.Sessions == nil {
 		return term.Info{}, errors.New("세션 기록을 쓸 수 없습니다")
 	}
+	if !sessions.ValidID(sessionID) {
+		return term.Info{}, errors.New("세션 ID 형식이 올바르지 않습니다")
+	}
 	rec, ok, err := a.deps.Sessions.Get(sessionID)
 	if err != nil {
 		return term.Info{}, err
@@ -127,11 +131,41 @@ func (a *App) StartQA(workspaceID, feature, mode string, cols, rows int) (term.I
 }
 
 // RestorableSessions lists sessions that were open when the app last exited.
+// They are handed out once, so reloading the page does not restore again.
 func (a *App) RestorableSessions() []sessions.Record {
-	if a.unlocked() != nil || a.deps.Restorable == nil {
+	if a.unlocked() != nil {
 		return []sessions.Record{}
 	}
-	return a.deps.Restorable
+	a.restoreMu.Lock()
+	defer a.restoreMu.Unlock()
+	out := a.deps.Restorable
+	a.deps.Restorable = nil
+	if out == nil {
+		return []sessions.Record{}
+	}
+	return out
+}
+
+// maxTerminalName keeps tab names readable.
+const maxTerminalName = 60
+
+// RenameTerminal gives a terminal tab a name; for Claude it also names the
+// session in the history.
+func (a *App) RenameTerminal(id, name string) error {
+	if err := a.unlocked(); err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > maxTerminalName {
+		return fmt.Errorf("이름은 1~%d자로 정하세요", maxTerminalName)
+	}
+	if err := a.terms.Rename(id, name); err != nil {
+		return err
+	}
+	if key, ok := a.agents.keyForTerm(id); ok && a.deps.Sessions != nil {
+		return a.deps.Sessions.Rename(key, name)
+	}
+	return nil
 }
 
 // openClaude starts a Claude session connected to the bridge.
@@ -141,6 +175,9 @@ func (a *App) openClaude(workspaceID string, opts launch.ClaudeOptions, folders 
 	}
 	// The session ID doubles as the bridge key: hooks and MCP calls carry it in the URL.
 	key := opts.SessionID
+	if !sessions.ValidID(key) {
+		return term.Info{}, errors.New("세션 ID 형식이 올바르지 않습니다")
+	}
 	if _, live := a.agents.get(key); live {
 		return term.Info{}, errors.New("이 Claude 세션은 이미 열려 있습니다")
 	}

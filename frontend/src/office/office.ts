@@ -1,0 +1,297 @@
+import { DESK_H, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, type AgentState, type HookInput } from './agentState';
+import { drawDesk, drawRoom, drawRug } from './background';
+import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, frameRect, pickSheet, sheets, type Direction } from './sprites';
+
+/** A terminal as the office sees it. */
+export interface OfficeTerminal {
+  id: string;
+  title: string; // terminal (tab) name, shown above the character
+  workspace: string; // workspace name, shown below
+  kind: 'claude' | 'shell';
+  alive: boolean;
+}
+
+const SCALE = 3; // CSS px per sprite pixel
+const SIZE = FRAME * SCALE;
+const COLORS = {
+  monitor: '#1b1c1f',
+  screenIdle: '#2e3a4f',
+  screenWork: '#7aa2f7',
+  screenWait: '#e5c07b',
+  name: '#e3e5e8',
+  label: '#9aa0a6',
+  bubble: '#e3e5e8',
+  bubbleText: '#1e1f22',
+  wait: '#e5c07b',
+};
+const FPS = 10; // pixel-art pace
+const FONT = '"Segoe UI", "Malgun Gothic", sans-serif';
+
+interface Character {
+  term: OfficeTerminal;
+  state: AgentState;
+  sheet: HTMLImageElement;
+  dog: boolean;
+  dir: Direction;
+  desk: number;
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  nextWander: number;
+  phase: number;
+}
+
+const short = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+export class Office {
+  private readonly chars = new Map<string, Character>();
+  private readonly ctx: CanvasRenderingContext2D;
+  private readonly art = sheets();
+  private frame = 0;
+  private last = 0;
+  private tick = 0;
+  private width = 0;
+  private height = 0;
+  private readonly observer: ResizeObserver;
+  private readonly cleanups: Array<() => void> = [];
+
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly onPick: (termId: string) => void,
+  ) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('2D canvas is not available');
+    this.ctx = ctx;
+    this.observer = new ResizeObserver(() => this.resize());
+    this.observer.observe(canvas);
+    this.resize();
+
+    const onClick = (e: MouseEvent) => {
+      const hit = this.hitTest(e);
+      if (hit) this.onPick(hit.term.id);
+    };
+    const onMove = (e: MouseEvent) => {
+      const hit = this.hitTest(e);
+      canvas.style.cursor = hit ? 'pointer' : 'default';
+      canvas.title = hit ? `${hit.term.title} — 클릭하면 터미널로 이동` : '';
+    };
+    canvas.addEventListener('click', onClick);
+    canvas.addEventListener('mousemove', onMove);
+    this.cleanups.push(() => {
+      canvas.removeEventListener('click', onClick);
+      canvas.removeEventListener('mousemove', onMove);
+    });
+    this.frame = requestAnimationFrame((t) => this.loop(t));
+  }
+
+  /** Keeps one character per terminal shown. */
+  sync(terminals: OfficeTerminal[]): void {
+    const ids = new Set(terminals.map((t) => t.id));
+    for (const id of [...this.chars.keys()]) if (!ids.has(id)) this.chars.delete(id);
+    terminals.forEach((term, i) => {
+      const existing = this.chars.get(term.id);
+      if (existing) {
+        existing.term = term;
+        existing.desk = i;
+        return;
+      }
+      const spot = deskSpot(i, this.width);
+      const sheet = pickSheet(term.id, term.kind, this.art.ninjas, this.art.dog);
+      this.chars.set(term.id, {
+        term,
+        state: { mood: 'idle', tool: '', since: performance.now() },
+        sheet,
+        dog: sheet === this.art.dog,
+        dir: 'down',
+        desk: i,
+        x: spot.x,
+        y: this.height - 30,
+        tx: spot.x,
+        ty: this.height - 30,
+        nextWander: 0,
+        phase: Math.random() * Math.PI * 2,
+      });
+    });
+  }
+
+  /** Applies a Claude hook event to its character. */
+  event(termId: string, ev: HookInput): void {
+    const c = this.chars.get(termId);
+    if (c) c.state = nextState(c.state, ev, performance.now());
+  }
+
+  destroy(): void {
+    cancelAnimationFrame(this.frame);
+    this.observer.disconnect();
+    for (const off of this.cleanups) off();
+  }
+
+  private resize() {
+    const dpr = window.devicePixelRatio || 1;
+    this.width = this.canvas.clientWidth;
+    this.height = this.canvas.clientHeight;
+    const bw = Math.round(this.width * dpr);
+    const bh = Math.round(this.height * dpr);
+    if (this.canvas.width !== bw || this.canvas.height !== bh) {
+      this.canvas.width = bw;
+      this.canvas.height = bh;
+    }
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.ctx.imageSmoothingEnabled = false;
+  }
+
+  private hitTest(e: MouseEvent): Character | undefined {
+    const r = this.canvas.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    return [...this.chars.values()].find((c) => Math.abs(x - c.x) < SIZE / 2 && y > c.y - SIZE && y < c.y + 4);
+  }
+
+  private loop(t: number) {
+    this.frame = requestAnimationFrame((n) => this.loop(n));
+    if (t - this.last < 1000 / FPS) return;
+    this.last = t;
+    this.tick++;
+    this.update(t);
+    this.draw(t);
+  }
+
+  /** Busy characters go to their desk; idle ones float around the open floor. */
+  private update(now: number) {
+    const openTop = this.deskAreaBottom() + 30;
+    for (const c of this.chars.values()) {
+      const spot = deskSpot(c.desk, this.width);
+      const busy = c.state.mood !== 'idle' && c.term.alive;
+      if (busy) {
+        // On the stool in front of the desk.
+        c.tx = spot.x;
+        c.ty = spot.y + DESK_H - 2;
+      } else if (now > c.nextWander) {
+        c.tx = 30 + Math.random() * Math.max(1, this.width - 60);
+        c.ty = Math.min(this.height - 22, openTop + SIZE + Math.random() * Math.max(1, this.height - openTop - SIZE - 22));
+        c.nextWander = now + 3000 + Math.random() * 5000;
+      }
+      const dx = c.tx - c.x;
+      const dy = c.ty - c.y;
+      const dist = Math.hypot(dx, dy);
+      const speed = busy ? 7 : 2.5;
+      if (dist > speed) {
+        c.x += (dx / dist) * speed;
+        c.y += (dy / dist) * speed;
+        c.dir = directionFor(dx, dy);
+      } else {
+        c.x = c.tx;
+        c.y = c.ty;
+        // At the desk the character faces the monitor.
+        if (busy) c.dir = 'up';
+      }
+    }
+  }
+
+  private deskAreaBottom(): number {
+    if (!this.chars.size) return 0;
+    return deskSpot(this.chars.size - 1, this.width).y + DESK_H;
+  }
+
+  private draw(now: number) {
+    const { ctx, width: w, height: h } = this;
+    drawRoom(ctx, w, h, WALL_H);
+    drawRug(ctx, w, this.deskAreaBottom() || WALL_H, h);
+
+    if (!this.chars.size) {
+      ctx.fillStyle = COLORS.label;
+      ctx.font = `12px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.fillText('이 워크스페이스에서 터미널을 열면 캐릭터가 나타납니다', w / 2, h / 2);
+      return;
+    }
+
+    for (const c of this.chars.values()) this.drawDesk(c);
+    // Back to front so lower characters overlap higher ones.
+    for (const c of [...this.chars.values()].sort((a, b) => a.y - b.y)) this.drawCharacter(c, now);
+  }
+
+  private drawDesk(c: Character) {
+    const { ctx } = this;
+    const s = deskSpot(c.desk, this.width);
+    drawDesk(ctx, s.x, s.y);
+    // The monitor on the desk shows the character's state.
+    const x = Math.round(s.x - 12);
+    const y = Math.round(s.y + 4);
+    ctx.fillStyle = COLORS.monitor;
+    ctx.fillRect(x - 2, y, 28, 18);
+    const mood = c.term.alive ? c.state.mood : 'idle';
+    const blink = this.tick % 8 < 4;
+    ctx.fillStyle = mood === 'working' ? COLORS.screenWork : mood === 'waiting' && blink ? COLORS.screenWait : COLORS.screenIdle;
+    ctx.fillRect(x, y + 2, 24, 12);
+  }
+
+  private drawSprite(c: Character, moving: boolean, atDesk: boolean, x: number, y: number) {
+    const { ctx } = this;
+    if (!c.sheet.complete || !c.sheet.naturalWidth) return; // still loading
+    if (c.dog) {
+      // Two frames side by side, facing left; mirror when going right.
+      const sx = (moving || this.tick % 6 < 3 ? this.tick % 2 : 0) * FRAME;
+      ctx.save();
+      if (c.dir === 'right') {
+        ctx.translate(x + SIZE, y);
+        ctx.scale(-1, 1);
+        ctx.drawImage(c.sheet, sx, 0, FRAME, FRAME, 0, 0, SIZE, SIZE);
+      } else {
+        ctx.drawImage(c.sheet, sx, 0, FRAME, FRAME, x, y, SIZE, SIZE);
+      }
+      ctx.restore();
+      return;
+    }
+    let row = 0;
+    if (moving) row = this.tick % WALK_FRAMES;
+    else if (atDesk && c.state.mood === 'working') row = this.tick % 2 ? ACTION_ROW : 0;
+    const { sx, sy } = frameRect(c.dir, row);
+    ctx.drawImage(c.sheet, sx, sy, FRAME, FRAME, x, y, SIZE, SIZE);
+  }
+
+  private drawCharacter(c: Character, now: number) {
+    const { ctx } = this;
+    const moving = Math.hypot(c.tx - c.x, c.ty - c.y) > 1;
+    const atDesk = !moving && c.state.mood !== 'idle';
+    // Idle characters float gently.
+    const bob = !moving && !atDesk ? Math.round(Math.sin(now / 400 + c.phase) * 3) : 0;
+    const x = Math.round(c.x - SIZE / 2);
+    const y = Math.round(c.y - SIZE + bob);
+    ctx.globalAlpha = c.term.alive ? 1 : 0.4;
+    if (!moving && !atDesk) {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(x + 12, Math.round(c.y), SIZE - 24, 3);
+    }
+    this.drawSprite(c, moving, atDesk, x, y);
+    ctx.globalAlpha = 1;
+
+    // Terminal name above the head, workspace name below the feet.
+    ctx.textAlign = 'center';
+    ctx.font = `bold 11px ${FONT}`;
+    ctx.fillStyle = COLORS.name;
+    ctx.fillText(short(nameLabel(c.term.title), 16), c.x, y - 4);
+    ctx.font = `10px ${FONT}`;
+    ctx.fillStyle = COLORS.label;
+    ctx.fillText(short(c.term.workspace, 16), c.x, c.y + 13);
+
+    const text = c.term.alive ? bubbleFor(c.state) : 'zZ';
+    if (text && !(c.state.mood === 'waiting' && this.tick % 8 >= 6)) this.drawBubble(text, c.x, y - 18, c.state.mood === 'waiting');
+  }
+
+  private drawBubble(text: string, cx: number, bottom: number, alert: boolean) {
+    const { ctx } = this;
+    ctx.font = '10px "Cascadia Mono", Consolas, monospace';
+    const label = short(text, 14);
+    const w = Math.round(Math.min(ctx.measureText(label).width, 90) + 10);
+    const x = Math.round(cx - w / 2);
+    const y = bottom - 16;
+    ctx.fillStyle = alert ? COLORS.wait : COLORS.bubble;
+    ctx.fillRect(x, y, w, 14);
+    ctx.fillRect(Math.round(cx) - 2, y + 14, 4, 3); // tail
+    ctx.fillStyle = COLORS.bubbleText;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, cx, y + 10);
+  }
+}

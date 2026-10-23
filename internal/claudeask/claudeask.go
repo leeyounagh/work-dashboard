@@ -19,11 +19,18 @@ import (
 
 // Request is one headless question.
 type Request struct {
-	Prompt       string
-	Schema       json.RawMessage // JSON schema for structured_output
-	AllowedTools []string        // e.g. "mcp__linear" (a whole server) — nothing else is allowed
-	Model        string          // default "haiku": cheap and fast enough for lookups
+	Prompt string
+	Schema json.RawMessage // JSON schema for structured_output
+	// AllowedTools are exact, read-only MCP tool names. Built-in tools are
+	// disabled entirely and anything not listed is denied, so content read
+	// through a connector cannot make Claude write, delete or run commands.
+	AllowedTools    []string
+	DisallowedTools []string // a second line of defense (write tools by name)
+	Model           string   // default "haiku": cheap and fast enough for lookups
 }
+
+// maxBudgetUSD caps one lookup's cost.
+const maxBudgetUSD = "0.25"
 
 // Answer is the structured result.
 type Answer struct {
@@ -41,6 +48,7 @@ func Claude(exe string) Runner {
 		cmd := procutil.Background(exec.CommandContext(ctx, exe, args...))
 		cmd.Dir = dir
 		cmd.Env = launch.CleanEnv(os.Environ())
+		cmd.WaitDelay = procutil.WaitDelay
 		out, err := cmd.Output()
 		if err != nil && len(out) == 0 {
 			var exitErr *exec.ExitError
@@ -65,9 +73,15 @@ func Args(r Request) []string {
 		"--output-format", "json",
 		"--json-schema", string(r.Schema),
 		"--no-session-persistence",
+		"--tools", "", // no Bash/Read/Write/...: only the allowed MCP tools exist
+		"--permission-mode", "dontAsk", // deny instead of using the user's allow rules
+		"--max-budget-usd", maxBudgetUSD,
 	}
 	if len(r.AllowedTools) > 0 {
 		args = append(args, "--allowedTools", strings.Join(r.AllowedTools, ","))
+	}
+	if len(r.DisallowedTools) > 0 {
+		args = append(args, "--disallowedTools", strings.Join(r.DisallowedTools, ","))
 	}
 	return append(args, "--", r.Prompt)
 }
@@ -78,7 +92,9 @@ type cliResult struct {
 	Subtype           string          `json:"subtype"`
 	StructuredOutput  json.RawMessage `json:"structured_output"`
 	TotalCostUSD      float64         `json:"total_cost_usd"`
-	PermissionDenials []any           `json:"permission_denials"`
+	PermissionDenials []struct {
+		ToolName string `json:"tool_name"`
+	} `json:"permission_denials"`
 }
 
 // Ask runs the request in dir (a scratch directory, so no project settings apply).
@@ -101,10 +117,15 @@ func Ask(ctx context.Context, run Runner, dir string, r Request) (Answer, error)
 		}
 		return Answer{CostUSD: res.TotalCostUSD}, fmt.Errorf("claude: %s", msg)
 	}
-	if len(res.StructuredOutput) == 0 || string(res.StructuredOutput) == "null" {
-		if len(res.PermissionDenials) > 0 {
-			return Answer{CostUSD: res.TotalCostUSD}, errors.New("claude 가 필요한 도구를 쓰지 못했습니다(커넥터 연결을 확인하세요)")
+	// Any denied tool call (e.g. an attempted write) makes the answer untrustworthy.
+	if len(res.PermissionDenials) > 0 {
+		names := make([]string, 0, len(res.PermissionDenials))
+		for _, d := range res.PermissionDenials {
+			names = append(names, d.ToolName)
 		}
+		return Answer{CostUSD: res.TotalCostUSD}, fmt.Errorf("claude 가 허용되지 않은 도구를 쓰려 했습니다(%s). 커넥터 연결과 내용을 확인하세요", strings.Join(names, ", "))
+	}
+	if len(res.StructuredOutput) == 0 || string(res.StructuredOutput) == "null" {
 		return Answer{CostUSD: res.TotalCostUSD}, errors.New("claude 가 정해진 형식으로 답하지 않았습니다")
 	}
 	return Answer{Output: res.StructuredOutput, CostUSD: res.TotalCostUSD}, nil

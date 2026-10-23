@@ -88,3 +88,46 @@ func TestCapAndCorruptFile(t *testing.T) {
 		t.Fatalf("empty store = %v, %v", open, err)
 	}
 }
+
+func TestValidID(t *testing.T) {
+	for _, ok := range []string{"2de3e295-5032-4f1a-bdcc-36f7f1188772", "sess-1"} {
+		if !ValidID(ok) {
+			t.Errorf("%q should be valid", ok)
+		}
+	}
+	for _, bad := range []string{"", "--dangerously-skip-permissions", "-x", `..\x`, "a b", strings.Repeat("a", 65)} {
+		if ValidID(bad) {
+			t.Errorf("%q should be invalid", bad)
+		}
+	}
+}
+
+func TestLoadDropsInvalidIDs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.json")
+	data := `[{"sessionId":"--resume","workspaceId":"w","title":"x","open":true},{"sessionId":"good","workspaceId":"w","title":"t","open":true}]`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	open, err := NewStore(path).TakeOpenAtExit()
+	if err != nil || len(open) != 1 || open[0].SessionID != "good" {
+		t.Fatalf("open = %+v, %v", open, err)
+	}
+}
+
+func TestRenameKeepsNameOverPrompt(t *testing.T) {
+	s := NewStore(filepath.Join(t.TempDir(), "s.json"))
+	if err := s.Started(Record{SessionID: "a", WorkspaceID: "w", LastActive: t0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rename("a", "휴가 기능"); err != nil {
+		t.Fatal(err)
+	}
+	// A later first prompt must not replace a name the user chose.
+	if err := s.Touch("a", "prompt text", t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	r, _, _ := s.Get("a")
+	if r.Title != "휴가 기능" {
+		t.Fatalf("title = %q", r.Title)
+	}
+}

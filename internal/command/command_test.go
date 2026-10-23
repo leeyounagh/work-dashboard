@@ -49,6 +49,16 @@ func TestRun(t *testing.T) {
 	}
 }
 
+func TestRunRefusesBatchFiles(t *testing.T) {
+	// Go passes .cmd/.bat arguments through cmd.exe parsing (BatBadBut), so
+	// "no shell" would not hold for them.
+	for _, line := range []string{`npx.cmd deploy`, `C:\tools\status.BAT --json`} {
+		if _, err := Run(context.Background(), t.TempDir(), line); err == nil || !strings.Contains(err.Error(), ".cmd") {
+			t.Errorf("Run(%q) err = %v", line, err)
+		}
+	}
+}
+
 func TestCappedOutput(t *testing.T) {
 	var c capped
 	big := make([]byte, maxOutput+10)

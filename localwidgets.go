@@ -24,8 +24,38 @@ import (
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
-// askCacheFor keeps connector lookups (which cost Claude usage) to one per half hour.
-const askCacheFor = 30 * time.Minute
+// askCacheFor keeps connector lookups (which cost Claude usage) to one per
+// half hour; failures are kept for askErrorFor so auto refresh does not pay
+// for the same failure every few minutes. An explicit refresh always retries.
+const (
+	askCacheFor = 30 * time.Minute
+	askErrorFor = 10 * time.Minute
+)
+
+// Exact read-only tools for connector lookups (see claudeask.Request).
+var (
+	linearReadTools = []string{
+		"mcp__linear__list_issues", "mcp__linear__get_issue", "mcp__linear__list_teams",
+		"mcp__linear__list_issue_statuses", "mcp__linear__get_user",
+	}
+	linearWriteTools = []string{
+		"mcp__linear__save_issue", "mcp__linear__save_comment", "mcp__linear__delete_comment",
+		"mcp__linear__create_attachment", "mcp__linear__delete_attachment", "mcp__linear__share_issue",
+		"mcp__linear__save_project", "mcp__linear__save_document", "mcp__linear__merge_diff",
+	}
+	notionReadTools  = []string{"mcp__claude_ai_Notion__notion-fetch"}
+	notionWriteTools = []string{
+		"mcp__claude_ai_Notion__notion-update-page", "mcp__claude_ai_Notion__notion-create-pages",
+		"mcp__claude_ai_Notion__notion-move-pages", "mcp__claude_ai_Notion__notion-duplicate-page",
+		"mcp__claude_ai_Notion__notion-delete-pages", "mcp__claude_ai_Notion__notion-create-comment",
+	}
+)
+
+// Links reported by Claude are only kept when they point at the service.
+var (
+	linearURL = regexp.MustCompile(`^https://linear\.app/`)
+	notionURL = regexp.MustCompile(`^https://(www\.)?notion\.(so|site)/`)
+)
 
 // sessionStore is the part of the sessions store the app needs.
 type sessionStore interface {
@@ -33,11 +63,13 @@ type sessionStore interface {
 	Touch(id, prompt string, at time.Time) error
 	Closed(id string) error
 	Get(id string) (sessions.Record, bool, error)
+	Rename(id, title string) error
 	Recent(workspaceID string, n int) ([]sessions.Record, error)
 }
 
 type askEntry struct {
 	data any
+	err  error
 	at   time.Time
 }
 
@@ -206,7 +238,9 @@ func (a *App) deploy(ctx context.Context, ws workspace.Workspace, s widgetdata.S
 		}
 		return widgetdata.DeployData{}, fmt.Errorf("배포 상태 명령이 아무것도 출력하지 않았습니다: %s", msg)
 	}
-	return widgetdata.BuildDeploy(out.Stdout, out.ExitCode, s), nil
+	d := widgetdata.BuildDeploy(out.Stdout, out.ExitCode, s)
+	d.Truncated = out.Truncated
+	return d, nil
 }
 
 // cachedAsk runs a connector lookup at most once per askCacheFor per key.
@@ -217,27 +251,36 @@ func (a *App) cachedAsk(key string, fresh bool, fetch func() (any, error)) (any,
 	}
 	e, ok := a.asks.entries[key]
 	a.asks.mu.Unlock()
-	if ok && !fresh && time.Since(e.at) < askCacheFor {
-		return e.data, nil
+	if ok && !fresh {
+		if e.err == nil && time.Since(e.at) < askCacheFor {
+			return e.data, nil
+		}
+		if e.err != nil && time.Since(e.at) < askErrorFor {
+			return nil, e.err
+		}
 	}
 	v, err, _ := a.asks.flight.Do(key, fetch)
-	if err != nil {
-		return nil, err
-	}
 	a.asks.mu.Lock()
-	a.asks.entries[key] = askEntry{data: v, at: time.Now()}
+	a.asks.entries[key] = askEntry{data: v, err: err, at: time.Now()}
+	for k, old := range a.asks.entries {
+		if time.Since(old.at) > askCacheFor {
+			delete(a.asks.entries, k)
+		}
+	}
 	a.asks.mu.Unlock()
-	return v, nil
+	return v, err
 }
 
 func (a *App) ask(ctx context.Context, r claudeask.Request, out any) (float64, error) {
 	if a.deps.Ask == nil {
 		return 0, errors.New("claude 를 찾지 못했습니다")
 	}
-	if err := os.MkdirAll(a.deps.RunDir, 0o700); err != nil {
+	// A separate empty folder: never the run dir that holds the bridge tokens.
+	dir := filepath.Join(filepath.Dir(a.deps.RunDir), "ask")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return 0, err
 	}
-	ans, err := claudeask.Ask(ctx, a.deps.Ask, a.deps.RunDir, r)
+	ans, err := claudeask.Ask(ctx, a.deps.Ask, dir, r)
 	if ctx.Err() != nil {
 		return ans.CostUSD, errors.New("Claude 응답이 시간 안에 오지 않았습니다. 잠시 뒤 새로고침하세요")
 	}
@@ -282,12 +325,17 @@ func (a *App) linear(ctx context.Context, s widgetdata.Settings, fresh bool) (an
 			ConnectorAvailable bool          `json:"connectorAvailable"`
 			Issues             []LinearIssue `json:"issues"`
 		}
-		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: linearSchema, AllowedTools: []string{"mcp__linear"}}, &out)
+		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: linearSchema, AllowedTools: linearReadTools, DisallowedTools: linearWriteTools}, &out)
 		if err != nil {
 			return nil, err
 		}
 		if !out.ConnectorAvailable {
 			return nil, errNoConnector
+		}
+		for i := range out.Issues {
+			if !linearURL.MatchString(out.Issues[i].URL) {
+				out.Issues[i].URL = ""
+			}
 		}
 		if out.Issues == nil {
 			out.Issues = []LinearIssue{}
@@ -319,12 +367,17 @@ func (a *App) notion(ctx context.Context, s widgetdata.Settings, fresh bool) (an
 			ConnectorAvailable bool         `json:"connectorAvailable"`
 			Pages              []NotionPage `json:"pages"`
 		}
-		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: notionSchema, AllowedTools: []string{"mcp__claude_ai_Notion", "mcp__notion"}}, &out)
+		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: notionSchema, AllowedTools: notionReadTools, DisallowedTools: notionWriteTools}, &out)
 		if err != nil {
 			return nil, err
 		}
 		if !out.ConnectorAvailable {
 			return nil, errNoConnector
+		}
+		for i := range out.Pages {
+			if !notionURL.MatchString(out.Pages[i].URL) {
+				out.Pages[i].URL = ""
+			}
 		}
 		if out.Pages == nil {
 			out.Pages = []NotionPage{}
@@ -374,6 +427,8 @@ func (a *App) sessionsData(ws workspace.Workspace, s widgetdata.Settings) (Sessi
 	if err != nil {
 		return d, err
 	}
-	d.Recent = recent
+	if recent != nil {
+		d.Recent = recent
+	}
 	return d, nil
 }

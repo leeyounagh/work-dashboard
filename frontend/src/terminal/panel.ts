@@ -2,7 +2,7 @@ import '@xterm/xterm/css/xterm.css';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 
-import { OpenClaude, OpenShell, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
+import { OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
 import { ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
 import { clipboardAction } from './clipboard';
 import { base64ToBytes } from '../lib/workspaceDraft';
@@ -47,7 +47,8 @@ export class TerminalPanel {
   private readonly early = new EarlyEvents();
   private readonly unsubscribe: Array<() => void>;
   private readonly resizeObserver: ResizeObserver;
-  private opening = false;
+  // Launches run one at a time (each measures its pane), in order, never dropped.
+  private queue: Promise<void> = Promise.resolve();
   private readonly listeners = new Set<(list: TerminalInfo[]) => void>();
 
   // Late events for tabs the user already closed are dropped, not buffered.
@@ -107,13 +108,21 @@ export class TerminalPanel {
     return this.start('claude', workspaceId, (cols, rows) => StartQA(workspaceId, feature, mode, cols, rows));
   }
 
-  private async start(
+  private start(
     kind: TerminalKind,
     workspaceId: string,
     launch: (cols: number, rows: number) => Promise<{ id: string; title: string; dir: string }>,
   ): Promise<void> {
-    if (this.opening) return; // ignore double clicks while a process starts
-    this.opening = true;
+    const run = this.queue.then(() => this.launch(kind, workspaceId, launch));
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async launch(
+    kind: TerminalKind,
+    workspaceId: string,
+    launch: (cols: number, rows: number) => Promise<{ id: string; title: string; dir: string }>,
+  ): Promise<void> {
     const pane = document.createElement('div');
     pane.className = 'term-pane';
     // The pane must be in the DOM and visible for xterm to measure its size.
@@ -144,8 +153,6 @@ export class TerminalPanel {
       pane.remove();
       this.onError(String(err));
       return;
-    } finally {
-      this.opening = false;
     }
     // Outside the try: the process is running now, so a UI error must not
     // dispose its terminal and orphan it.
@@ -164,6 +171,18 @@ export class TerminalPanel {
       title: session.title,
       tooltip: dir,
       kind: session.kind,
+      group: session.workspaceId,
+      onRename: async (name) => {
+        try {
+          await RenameTerminal(session.id, name);
+          session.title = name;
+          this.changed();
+          return true;
+        } catch (err) {
+          this.onError(String(err));
+          return false;
+        }
+      },
       pane: session.pane,
       onActivate: () => {
         this.fit(session);
@@ -192,7 +211,9 @@ export class TerminalPanel {
     const paste = () => {
       ClipboardGetText()
         .then((text) => {
-          if (text && session.alive) term.paste(text); // paste() applies bracketed paste mode
+          // paste() applies bracketed paste; strip markers so pasted text cannot end it early.
+          // eslint-disable-next-line no-control-regex
+          if (text && session.alive) term.paste(text.replace(/\x1b\[20[01]~/g, ''));
         })
         .catch((err) => this.onError(`붙여넣지 못했습니다: ${String(err)}`));
     };

@@ -44,11 +44,21 @@ export function makeSortable(
     const grip = handle ? el.querySelector<HTMLElement>(handle) : el;
     if (!grip) continue;
     // Only arm dragging from the grip, so text and buttons stay clickable.
-    grip.addEventListener('pointerdown', () => (el.draggable = true));
+    grip.addEventListener('pointerdown', () => {
+      el.draggable = true;
+      // A click without a drag fires no dragend: disarm on release so text in
+      // the item stays selectable.
+      const off = () => {
+        if (!dragging) el.draggable = false;
+      };
+      window.addEventListener('pointerup', off, { once: true });
+      window.addEventListener('pointercancel', off, { once: true });
+    });
     el.addEventListener('dragstart', (e) => {
       dragging = el.dataset.sortKey ?? null;
       el.classList.add('dragging');
-      e.dataTransfer?.setData('text/plain', dragging ?? '');
+      // A private type, so dropping into a text field or terminal inserts nothing.
+      e.dataTransfer?.setData('application/x-work-dashboard-sort', dragging ?? '');
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
     });
     el.addEventListener('dragend', () => {

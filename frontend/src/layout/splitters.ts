@@ -87,6 +87,7 @@ export function mountSplitters(root: HTMLElement): () => void {
     gutter.title = '드래그해서 크기 조절 · 더블클릭하면 기본 크기';
 
     const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !e.isPrimary) return;
       e.preventDefault();
       const start = sizes;
       const origin = vertical ? e.clientY : e.clientX;

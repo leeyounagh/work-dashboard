@@ -3,6 +3,7 @@
 export interface KeyLike {
   type: string;
   key: string;
+  code?: string;
   ctrlKey: boolean;
   shiftKey: boolean;
   altKey: boolean;
@@ -15,8 +16,9 @@ export interface KeyLike {
  */
 export function clipboardAction(e: KeyLike, hasSelection: boolean): 'copy' | 'paste' | null {
   if (e.type !== 'keydown' || !e.ctrlKey || e.altKey || e.metaKey) return null;
-  const k = e.key.toLowerCase();
+  // With a Korean IME active, e.key may not be the Latin letter; e.code is.
+  const k = e.code === 'KeyV' ? 'v' : e.code === 'KeyC' ? 'c' : e.key.toLowerCase();
   if (k === 'v') return 'paste';
-  if (k === 'c' && (hasSelection || e.shiftKey)) return hasSelection ? 'copy' : null;
+  if (k === 'c' && hasSelection) return 'copy';
   return null;
 }

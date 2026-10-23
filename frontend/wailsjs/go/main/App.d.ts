@@ -27,11 +27,15 @@ export function ReadFile(arg1:string):Promise<files.Content>;
 
 export function RefreshWidget(arg1:string,arg2:number):Promise<main.WidgetResult>;
 
+export function RenameTerminal(arg1:string,arg2:string):Promise<void>;
+
 export function RestorableSessions():Promise<Array<sessions.Record>>;
 
 export function ResumeClaude(arg1:string,arg2:string,arg3:number,arg4:number):Promise<term.Info>;
 
 export function SaveWorkspace(arg1:workspace.Workspace):Promise<workspace.Workspace>;
+
+export function SearchFiles(arg1:string,arg2:string):Promise<files.SearchResult>;
 
 export function StartQA(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number):Promise<term.Info>;
 

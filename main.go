@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2"
@@ -48,7 +49,19 @@ func askClaude(ctx context.Context, dir string, args ...string) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("claude 를 찾지 못했습니다: %w", err)
 	}
-	return claudeask.Claude(launch.ResolveExecutable(exe))(ctx, dir, args...)
+	exe = launch.ResolveExecutable(exe)
+	// A .cmd we cannot resolve would put arguments through cmd.exe parsing.
+	if ext := strings.ToLower(filepath.Ext(exe)); ext == ".cmd" || ext == ".bat" {
+		return nil, fmt.Errorf("claude 실행 파일(%s)을 직접 찾지 못했습니다", exe)
+	}
+	return claudeask.Claude(exe)(ctx, dir, args...)
+}
+
+func instanceID() string {
+	if devBuild {
+		return "work-dashboard-dev.leeyounagh.github.io"
+	}
+	return "work-dashboard.leeyounagh.github.io"
 }
 
 func main() {
@@ -111,7 +124,11 @@ func main() {
 		Windows:          &windows.Options{Theme: windows.Dark},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
-		Bind:             []any{app},
+		SingleInstanceLock: &options.SingleInstanceLock{
+			// Dev builds use their own id so `wails dev` never blocks the installed app.
+			UniqueId: instanceID(),
+		},
+		Bind: []any{app},
 	})
 	if err != nil {
 		log.Fatalf("work-dashboard: %v", err)

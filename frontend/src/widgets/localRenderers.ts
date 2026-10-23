@@ -24,6 +24,7 @@ interface DeployData {
   }>;
   pending: number;
   unknown: number;
+  truncated?: boolean;
   text?: string;
   exitCode: number;
 }
@@ -94,6 +95,7 @@ export function renderWorktrees(d: WorktreesData): HTMLElement {
 
 export function renderDeploy(d: DeployData, open: OpenURL): HTMLElement {
   const box = h('div', 'w-list');
+  if (d.truncated) box.append(h('p', 'warn small', '출력이 너무 길어 앞부분만 보여 줍니다.'));
   if (d.text !== undefined && d.text !== '' && !d.rows.length) {
     box.append(h('pre', 'w-json', d.text));
     if (d.exitCode) box.append(h('p', 'error small', `종료 코드 ${d.exitCode}`));
@@ -117,11 +119,12 @@ export function renderDeploy(d: DeployData, open: OpenURL): HTMLElement {
 
 export function renderLinear(d: LinearData, open: OpenURL): HTMLElement {
   const box = h('div', 'w-list');
-  if (!d.issues.length) box.append(h('p', 'muted small', '진행 중인 내 이슈가 없습니다.'));
-  for (const is of d.issues) {
+  const issues = d.issues ?? [];
+  if (!issues.length) box.append(h('p', 'muted small', '진행 중인 내 이슈가 없습니다.'));
+  for (const is of issues) {
     const item = h('div', 'w-item');
     const title = h('div', 'w-pr-title');
-    title.append(link(is.id, is.url, open, 'w-link w-pr-num'), h('span', 'w-pr-text', is.title));
+    title.append(is.url ? link(is.id, is.url, open, 'w-link w-pr-num') : h('span', 'w-pr-num', is.id), h('span', 'w-pr-text', is.title));
     const meta = h('div', 'w-meta');
     meta.append(h('span', 'w-chip muted', is.state));
     if (is.priority) meta.append(h('span', /urgent|high/i.test(is.priority) ? 'w-chip warn' : 'w-chip muted', is.priority));
@@ -134,7 +137,7 @@ export function renderLinear(d: LinearData, open: OpenURL): HTMLElement {
 
 export function renderNotion(d: NotionData, open: OpenURL): HTMLElement {
   const box = h('div', 'w-list');
-  for (const p of d.pages) {
+  for (const p of d.pages ?? []) {
     const item = h('div', 'w-item');
     const title = h('div', 'w-pr-title');
     title.append(p.url ? link(p.title || p.id, p.url, open, 'w-link') : h('span', '', p.title || p.id));
@@ -180,8 +183,9 @@ export function renderQA(d: QAData, actions?: WidgetActions): HTMLElement {
 
 export function renderSessions(d: SessionsData, actions?: WidgetActions): HTMLElement {
   const box = h('div', 'w-list');
-  if (!d.recent.length) box.append(h('p', 'muted small', '아직 이어갈 Claude 세션이 없습니다.'));
-  for (const s of d.recent) {
+  const recent = d.recent ?? [];
+  if (!recent.length) box.append(h('p', 'muted small', '아직 이어갈 Claude 세션이 없습니다.'));
+  for (const s of recent) {
     const item = h('div', 'w-item');
     const title = h('div', 'w-pr-title');
     title.append(h('span', 'w-pr-text', s.title));

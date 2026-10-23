@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -81,11 +82,17 @@ type App struct {
 	// shuttingDown keeps sessions killed by app exit marked open, so they
 	// can be offered for restore next time.
 	shuttingDown atomic.Bool
+	restoreMu    sync.Mutex
+	// life is cancelled on shutdown so widget loads (gh, git, headless claude)
+	// stop with the app.
+	life      context.Context
+	stopLoads context.CancelFunc
 }
 
 // NewApp wires the app with its dependencies.
 func NewApp(deps Deps) *App {
 	a := &App{ctx: context.Background(), deps: deps, agents: newAgentRegistry()}
+	a.life, a.stopLoads = context.WithCancel(context.Background())
 	a.terms = term.NewManager(deps.Start, a.emitData, a.emitExit)
 	return a
 }
@@ -96,6 +103,7 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) shutdown(context.Context) {
 	a.shuttingDown.Store(true)
+	a.stopLoads()
 	a.terms.CloseAll()
 }
 
