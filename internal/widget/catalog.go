@@ -120,6 +120,7 @@ var catalog = []Definition{
 		Settings: []SettingSpec{
 			{Key: "domain", Label: "도메인", Kind: KindString, Default: ""},
 			{Key: "features", Label: "기능", Kind: KindStringList, Default: []string{}},
+			{Key: "reportsDir", Label: "보고서 폴더", Kind: KindString, Default: ""},
 		},
 	},
 	{
@@ -137,7 +138,7 @@ var catalog = []Definition{
 		Description: "앱을 다시 켤 때 터미널 탭과 Claude 대화를 복원",
 		Source:      SourceLocal,
 		Settings: []SettingSpec{
-			{Key: "resumeClaude", Label: "claude --resume 으로 이어가기", Kind: KindBool, Default: true},
+			{Key: "resumeClaude", Label: "앱을 다시 켜면 열려 있던 Claude 세션을 자동으로 이어가기", Kind: KindBool, Default: true},
 		},
 	},
 }

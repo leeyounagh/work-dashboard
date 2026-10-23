@@ -1,4 +1,13 @@
 import type { Workspace } from '../lib/widgets';
+import { makeSortable, type Where } from '../lib/sortable';
+
+function grip(): HTMLElement {
+  const g = document.createElement('span');
+  g.className = 'grip';
+  g.textContent = '⠿';
+  g.title = '드래그해서 순서 바꾸기';
+  return g;
+}
 
 export interface SidebarState {
   workspaces: Workspace[];
@@ -18,6 +27,8 @@ export interface SidebarHandlers {
   removeFolder(index: number): void;
   save(): void;
   remove(): void;
+  reorderWorkspaces(from: string, to: string, where: Where): void;
+  reorderFolders(from: string, to: string, where: Where): void;
 }
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] {
@@ -42,13 +53,15 @@ function renderList(state: SidebarState, h: SidebarHandlers): HTMLElement {
     item.title = ws.folders.join('\n');
     item.setAttribute('aria-current', String(selected));
     const li = node('li', 'ws-row');
-    li.append(item);
+    li.dataset.sortKey = ws.id;
+    li.append(grip(), item);
     list.append(li);
   }
   if (state.workspaces.length === 0 && !state.draft) {
     list.append(node('li', 'muted', '아직 워크스페이스가 없습니다.'));
   }
   for (const p of state.problems) list.append(node('li', 'error', `불러오지 못함: ${p}`));
+  makeSortable(list, 'li.ws-row', h.reorderWorkspaces, '.grip');
   return list;
 }
 
@@ -72,10 +85,13 @@ function renderEditor(state: SidebarState, draft: Workspace, h: SidebarHandlers)
   const folders = node('ul', 'folders');
   draft.folders.forEach((f, i) => {
     const li = node('li', 'folder');
-    li.append(node('span', 'folder-path', f), button('×', 'icon', () => h.removeFolder(i)));
-    li.title = f;
+    li.dataset.sortKey = f;
+    li.append(grip(), node('span', 'folder-path', f), button('×', 'icon', () => h.removeFolder(i)));
+    li.title = i === 0 ? `${f}
+(Claude 가 여기서 시작합니다)` : f;
     folders.append(li);
   });
+  makeSortable(folders, 'li.folder', h.reorderFolders, '.grip');
   if (draft.folders.length === 0) folders.append(node('li', 'muted', 'Claude 가 함께 볼 폴더를 추가하세요.'));
 
   const notes = node('textarea', 'field notes');

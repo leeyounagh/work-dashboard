@@ -15,7 +15,9 @@ import {
   type ReviewQueueData,
 } from './renderers';
 import { formatSetting, parseSetting } from './settingsForm';
-import { renderLocal } from './localRenderers';
+import { renderLocal, type WidgetActions } from './localRenderers';
+import { collapseKey, loadCollapsed, saveCollapsed, toggleCollapsed, type Collapsed } from './collapse';
+import { makeSortable, moveBy, type Where } from '../lib/sortable';
 
 const AUTO_REFRESH_MS = 3 * 60 * 1000;
 
@@ -30,7 +32,7 @@ export type SaveWidgets = (workspaceId: string, update: (prev: Instance[]) => In
 
 const open = (url: string) => BrowserOpenURL(url);
 
-export function renderData(type: string, data: unknown): HTMLElement {
+export function renderData(type: string, data: unknown, actions?: WidgetActions): HTMLElement {
   if (data && typeof data === 'object' && (data as { planned?: boolean }).planned) {
     return renderPlanned(data as { message: string });
   }
@@ -44,7 +46,7 @@ export function renderData(type: string, data: unknown): HTMLElement {
     case 'claude-usage':
       return renderClaudeUsage(data as ClaudeUsageData);
     default:
-      return renderLocal(type, data, open) ?? renderJSON(data);
+      return renderLocal(type, data, open, actions) ?? renderJSON(data);
   }
 }
 
@@ -53,6 +55,11 @@ export function upsertWidget(prev: Instance[], type: string, change: (inst: Inst
   const i = prev.findIndex((w) => w.type === type);
   if (i < 0) return [...prev, change({ type, enabled: false, settings: {} })];
   return prev.map((w, j) => (j === i ? change(w) : w));
+}
+
+/** Moves a widget (by type) before/after another one. */
+export function moveWidget(prev: Instance[], from: string, to: string, where: Where): Instance[] {
+  return moveBy(prev, (w) => w.type, from, to, where);
 }
 
 /** Key for "already alerted": one per limit window, or per hour when the reset time is unknown. */
@@ -73,12 +80,14 @@ export class WidgetBoard {
   private timer = 0;
   private generation = 0; // bumps on every render; drops stale responses
   private loaders: Array<() => Promise<void>> = [];
+  private collapsed: Collapsed = loadCollapsed();
   private readonly alerted = new Set<string>();
 
   constructor(
     private readonly host: HTMLElement,
     private readonly saveWidgets: SaveWidgets,
     private readonly toast: (message: string) => void,
+    private readonly actionsFor: (workspaceId: string) => WidgetActions,
   ) {}
 
   setCatalog(catalog: Definition[]): void {
@@ -152,6 +161,10 @@ export class WidgetBoard {
       );
       if (!nodes.length) nodes.push(h('p', 'muted', '켜진 위젯이 없습니다. 「위젯 관리」에서 켜세요.'));
       this.host.replaceChildren(head, ...nodes);
+      // Drag a card by its ⠿ grip to change the order (saved with the workspace).
+      makeSortable(this.host, '.w-card[data-sort-key]', (from, to, where) => {
+        void this.saveWidgets(ws.id, (prev) => moveWidget(prev, from, to, where));
+      }, '.w-grip');
     }
     this.timer = window.setInterval(() => {
       if (document.hidden) return; // no polling while the window is hidden
@@ -181,14 +194,21 @@ export class WidgetBoard {
 
   private card(ws: Workspace, inst: Instance, index: number): HTMLElement {
     const def = this.def(inst.type)!;
+    const key = collapseKey(ws.id, inst.type);
     const card = h('section', 'w-card');
+    card.dataset.sortKey = inst.type;
     const title = h('div', 'w-card-head');
+    const grip = h('span', 'w-grip', '⠿');
+    grip.title = '드래그해서 순서 바꾸기';
     const when = h('span', 'w-when muted', '');
     const reload = h('button', 'icon', '↻');
     reload.title = '새로고침';
-    const gear = h('button', 'icon', '⚙');
-    gear.title = '설정';
-    title.append(h('h3', 'w-title', def.name), when, reload, gear);
+    const gear = h('button', 'ghost small-btn', '설정');
+    gear.title = '이 위젯의 설정 바꾸기';
+    const toggle = h('button', 'w-toggle');
+    toggle.type = 'button';
+    toggle.append(h('span', 'w-chevron', '▾'), h('h3', 'w-title', def.name));
+    title.append(grip, toggle, when, reload, gear);
     const body = h('div', 'w-body', '불러오는 중…');
     const settings = h('div', 'w-settings hidden');
     card.append(title, settings, body);
@@ -203,7 +223,7 @@ export class WidgetBoard {
         const res = (await (fresh ? RefreshWidget : WidgetData)(ws.id, index)) as Result;
         if (gen !== this.generation) return;
         if (res.error) body.replaceChildren(h('p', 'error small', res.error));
-        else body.replaceChildren(renderData(res.type, res.data));
+        else body.replaceChildren(renderData(res.type, res.data, this.actionsFor(ws.id)));
         when.textContent = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
         this.maybeAlert(res);
       } catch (err) {
@@ -213,14 +233,39 @@ export class WidgetBoard {
         reload.disabled = false;
       }
     };
+    // Collapsed cards show only their header and do not load (connector
+    // widgets cost Claude usage); expanding loads them.
+    let loaded = false;
+    const applyCollapsed = () => {
+      const collapsed = Boolean(this.collapsed[key]);
+      card.classList.toggle('collapsed', collapsed);
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      toggle.title = collapsed ? '펼치기' : '접기';
+      (toggle.firstChild as HTMLElement).textContent = collapsed ? '▸' : '▾';
+      if (!collapsed && !loaded) {
+        loaded = true;
+        void load(false);
+      }
+    };
+    toggle.addEventListener('click', () => {
+      this.collapsed = toggleCollapsed(this.collapsed, key);
+      saveCollapsed(this.collapsed);
+      applyCollapsed();
+    });
     // Auto refresh reuses the backend cache; the button asks for fresh data.
-    this.loaders.push(() => load(false));
-    reload.addEventListener('click', () => void load(true));
+    this.loaders.push(async () => {
+      if (!this.collapsed[key]) await load(false);
+    });
+    reload.addEventListener('click', () => {
+      loaded = true;
+      void load(true);
+    });
     gear.addEventListener('click', () => {
+      if (this.collapsed[key]) toggle.click(); // open the card to show its settings
       settings.classList.toggle('hidden');
       if (!settings.classList.contains('hidden')) settings.replaceChildren(this.settingsForm(ws, inst));
     });
-    void load(false);
+    applyCollapsed();
     return card;
   }
 

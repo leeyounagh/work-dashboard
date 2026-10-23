@@ -218,3 +218,14 @@ func CleanEnv(environ []string) []string {
 	}
 	return out
 }
+
+// ResolveExecutable returns the native exe behind an npm .cmd shim, or exe
+// itself. Running the exe directly keeps arguments away from cmd.exe parsing.
+func ResolveExecutable(exe string) string {
+	if isBatch(exe) {
+		if real, ok := resolveShim(exe); ok {
+			return real
+		}
+	}
+	return exe
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/leeyounagh/work-dashboard/internal/github"
 	"github.com/leeyounagh/work-dashboard/internal/widget"
 	"github.com/leeyounagh/work-dashboard/internal/widgetdata"
+	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
 // prCacheFor keeps gh from running on every widget refresh.
@@ -163,6 +164,22 @@ func (a *App) claudeData(ctx context.Context, alertPercent int) ClaudeUsageData 
 	return d
 }
 
+// widgetTimeout is how long a widget may take to load. Connector lookups
+// start a headless Claude session (user hooks, MCP servers) and take about a
+// minute; deploy status probes many slots.
+func widgetTimeout(typ string) time.Duration {
+	switch typ {
+	case widget.LinearIssues, widget.NotionSpecs:
+		return 4 * time.Minute
+	case widget.DeploySwap:
+		return 2 * time.Minute
+	case widget.Worktrees:
+		return time.Minute
+	default:
+		return 30 * time.Second
+	}
+}
+
 // WidgetData returns data for the widget at index in a workspace.
 func (a *App) WidgetData(workspaceID string, index int) WidgetResult {
 	return a.widgetData(workspaceID, index, false)
@@ -196,10 +213,10 @@ func (a *App) widgetData(workspaceID string, index int, fresh bool) WidgetResult
 		return res
 	}
 	s := widgetdata.Settings(resolved)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), widgetTimeout(inst.Type))
 	defer cancel()
 
-	data, err := a.buildWidget(ctx, inst.Type, s, fresh)
+	data, err := a.buildWidget(ctx, ws, inst.Type, s, fresh)
 	if err != nil {
 		res.Error = err.Error()
 		return res
@@ -208,7 +225,7 @@ func (a *App) widgetData(workspaceID string, index int, fresh bool) WidgetResult
 	return res
 }
 
-func (a *App) buildWidget(ctx context.Context, typ string, s widgetdata.Settings, fresh bool) (any, error) {
+func (a *App) buildWidget(ctx context.Context, ws workspace.Workspace, typ string, s widgetdata.Settings, fresh bool) (any, error) {
 	switch typ {
 	case widget.PRReviews:
 		prs, err := a.prsFor(ctx, s.String("scope", "mine"), s.Strings("repos"), fresh)
@@ -231,6 +248,6 @@ func (a *App) buildWidget(ctx context.Context, typ string, s widgetdata.Settings
 	case widget.ClaudeUsage:
 		return a.claudeData(ctx, s.Int("alertPercent", 90)), nil
 	default:
-		return a.buildLocalWidget(ctx, typ, s, fresh)
+		return a.buildLocalWidget(ctx, ws, typ, s, fresh)
 	}
 }

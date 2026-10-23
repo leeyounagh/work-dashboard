@@ -4,6 +4,7 @@ import './styles/app.css';
 import {
   DeleteWorkspace,
   PickFolder,
+  RestorableSessions,
   SaveWorkspace,
   WidgetCatalog,
   Workspaces,
@@ -12,10 +13,32 @@ import { workspace as models } from '../wailsjs/go/models';
 import { orEmpty, type Definition, type Instance, type ListResult, type Workspace } from './lib/widgets';
 import { WidgetBoard } from './widgets/board';
 import { addFolder, emptyDraft, isDirty, removeFolder } from './lib/workspaceDraft';
+import { applyOrder, moveBy } from './lib/sortable';
+
+const WS_ORDER_KEY = 'work-dashboard.workspaceOrder';
+
+/** Per-viewer order of the workspace list. */
+function loadWorkspaceOrder(): string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(WS_ORDER_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveWorkspaceOrder(ids: string[]) {
+  try {
+    localStorage.setItem(WS_ORDER_KEY, JSON.stringify(ids));
+  } catch {
+    // Not fatal: the order just isn't remembered.
+  }
+}
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { mountFloor } from './office/floor';
+import { mountSplitters } from './layout/splitters';
 import { TabHost } from './tabs/tabHost';
 import { TerminalPanel, type TerminalKind } from './terminal/panel';
 import { renderSidebar, type SidebarHandlers, type SidebarState } from './workspaces/sidebar';
@@ -93,7 +116,7 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
   const reload = async (selectId: string | null) => {
     try {
       const res = (await Workspaces()) as ListResult;
-      const workspaces = orEmpty(res.workspaces);
+      const workspaces = applyOrder(orEmpty(res.workspaces), (w) => w.id, loadWorkspaceOrder());
       const selected = workspaces.find((w) => w.id === selectId) ?? null;
       state = {
         ...state,
@@ -133,6 +156,15 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
       }
     },
     removeFolder: (index) => state.draft && setDraft(removeFolder(state.draft, index), true),
+    reorderFolders: (from, to, where) => {
+      if (state.draft) setDraft({ ...state.draft, folders: moveBy(state.draft.folders, (f) => f, from, to, where) }, true);
+    },
+    reorderWorkspaces: (from, to, where) => {
+      const workspaces = moveBy(state.workspaces, (w) => w.id, from, to, where);
+      saveWorkspaceOrder(workspaces.map((w) => w.id));
+      state = { ...state, workspaces };
+      render(false);
+    },
     save: async () => {
       if (!state.draft || state.saving) return; // a double click must not create twice
       state = { ...state, saving: true };
@@ -192,7 +224,7 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
     return run;
   };
 
-  return { reload, saveWidgets };
+  return { reload, saveWidgets, list: () => state.workspaces };
 }
 
 function wireTerminalButtons(panel: TerminalPanel, getSelection: () => Selection) {
@@ -215,7 +247,28 @@ function wireTerminalButtons(panel: TerminalPanel, getSelection: () => Selection
   return update;
 }
 
+/**
+ * Reopens Claude sessions that were running when the app last exited, for
+ * workspaces whose session-restore widget allows it.
+ */
+async function restoreSessions(panel: TerminalPanel, list: Workspace[]) {
+  let restorable;
+  try {
+    restorable = await RestorableSessions();
+  } catch {
+    return;
+  }
+  for (const rec of restorable ?? []) {
+    const ws = list.find((w) => w.id === rec.workspaceId);
+    const widget = ws?.widgets.find((w) => w.type === 'session-restore');
+    if (!widget?.enabled || widget.settings?.resumeClaude === false) continue;
+    await panel.resume(rec.workspaceId, rec.sessionId);
+  }
+}
+
 async function start() {
+  const stopSplitters = mountSplitters(byId('app'));
+  import.meta.hot?.dispose(stopSplitters);
   const stopFloor = startFloor();
   import.meta.hot?.dispose(() => stopFloor?.());
 
@@ -255,7 +308,10 @@ async function start() {
     tree.show(next.workspace); // re-renders only when the workspace or its folders changed
     board?.show(next.workspace);
   });
-  board = new WidgetBoard(byId('widget-board'), workspaces.saveWidgets, toast);
+  board = new WidgetBoard(byId('widget-board'), workspaces.saveWidgets, toast, (workspaceId) => ({
+    startQA: (feature, mode) => void panel.startQA(workspaceId, feature, mode),
+    resume: (sessionId) => void panel.resume(workspaceId, sessionId),
+  }));
   import.meta.hot?.dispose(() => board.destroy());
 
   const loadCatalog = async () => {
@@ -268,6 +324,7 @@ async function start() {
   // reload() reports its own errors in the sidebar.
   await Promise.all([loadCatalog(), workspaces.reload(null)]);
   board.show(selection.workspace);
+  await restoreSessions(panel, workspaces.list());
 }
 
 start().catch((err) => {

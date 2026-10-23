@@ -3,6 +3,7 @@
 import {main} from '../models';
 import {files} from '../models';
 import {term} from '../models';
+import {sessions} from '../models';
 import {workspace} from '../models';
 import {widget} from '../models';
 
@@ -26,7 +27,13 @@ export function ReadFile(arg1:string):Promise<files.Content>;
 
 export function RefreshWidget(arg1:string,arg2:number):Promise<main.WidgetResult>;
 
+export function RestorableSessions():Promise<Array<sessions.Record>>;
+
+export function ResumeClaude(arg1:string,arg2:string,arg3:number,arg4:number):Promise<term.Info>;
+
 export function SaveWorkspace(arg1:workspace.Workspace):Promise<workspace.Workspace>;
+
+export function StartQA(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number):Promise<term.Info>;
 
 export function TermClose(arg1:string):Promise<void>;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alertKey, upsertWidget } from './board';
+import { alertKey, moveWidget, upsertWidget } from './board';
 import type { Instance } from '../lib/widgets';
 
 describe('upsertWidget', () => {
@@ -28,5 +28,23 @@ describe('alertKey', () => {
     expect(k).toMatch(/^five_hour@hour-/);
     expect(alertKey('five_hour', '', now)).toBe(k);
     expect(alertKey('five_hour', '', now + 3_600_000)).not.toBe(k);
+  });
+});
+
+describe('moveWidget', () => {
+  const list: Instance[] = ['a', 'b', 'c', 'd'].map((type) => ({ type, enabled: true }));
+  const order = (l: Instance[]) => l.map((w) => w.type).join('');
+
+  it('moves a widget before or after another', () => {
+    expect(order(moveWidget(list, 'd', 'a', 'before'))).toBe('dabc');
+    expect(order(moveWidget(list, 'a', 'c', 'after'))).toBe('bcad');
+    expect(order(moveWidget(list, 'b', 'c', 'before'))).toBe('abcd');
+  });
+
+  it('keeps the list unchanged for unknown or identical types', () => {
+    expect(moveWidget(list, 'a', 'a', 'before')).toBe(list);
+    expect(moveWidget(list, 'x', 'a', 'before')).toBe(list);
+    expect(moveWidget(list, 'a', 'x', 'after')).toBe(list);
+    expect(order(list)).toBe('abcd');
   });
 });

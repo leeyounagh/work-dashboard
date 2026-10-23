@@ -255,6 +255,53 @@ export namespace main {
 
 }
 
+export namespace sessions {
+	
+	export class Record {
+	    sessionId: string;
+	    workspaceId: string;
+	    title: string;
+	    // Go type: time
+	    startedAt: any;
+	    // Go type: time
+	    lastActive: any;
+	    open: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Record(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.workspaceId = source["workspaceId"];
+	        this.title = source["title"];
+	        this.startedAt = this.convertValues(source["startedAt"], null);
+	        this.lastActive = this.convertValues(source["lastActive"], null);
+	        this.open = source["open"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace term {
 	
 	export class Info {

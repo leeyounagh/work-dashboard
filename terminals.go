@@ -4,10 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/leeyounagh/work-dashboard/internal/launch"
+	"github.com/leeyounagh/work-dashboard/internal/sessions"
 	"github.com/leeyounagh/work-dashboard/internal/term"
 	"github.com/leeyounagh/work-dashboard/internal/widget"
+	"github.com/leeyounagh/work-dashboard/internal/widgetdata"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
@@ -49,6 +53,11 @@ func defaultWidgets() []widget.Instance {
 
 // OpenClaude starts Claude Code with every folder of the workspace.
 func (a *App) OpenClaude(workspaceID string, cols, rows int) (term.Info, error) {
+	return a.startClaude(workspaceID, launch.ClaudeOptions{}, cols, rows)
+}
+
+// startClaude prepares the workspace (claude path, notes) and starts a session.
+func (a *App) startClaude(workspaceID string, opts launch.ClaudeOptions, cols, rows int) (term.Info, error) {
 	if err := a.unlocked(); err != nil {
 		return term.Info{}, err
 	}
@@ -64,7 +73,65 @@ func (a *App) OpenClaude(workspaceID string, cols, rows int) (term.Info, error) 
 	if err != nil {
 		return term.Info{}, err
 	}
-	return a.openClaude(ws.ID, launch.ClaudeOptions{Exe: exe, NotesFile: notes}, ws.Folders, ws.Name, cols, rows)
+	opts.Exe, opts.NotesFile = exe, notes
+	return a.openClaude(ws.ID, opts, ws.Folders, ws.Name, cols, rows)
+}
+
+// ResumeClaude continues an earlier session of this workspace (claude --resume).
+func (a *App) ResumeClaude(workspaceID, sessionID string, cols, rows int) (term.Info, error) {
+	if a.deps.Sessions == nil {
+		return term.Info{}, errors.New("세션 기록을 쓸 수 없습니다")
+	}
+	rec, ok, err := a.deps.Sessions.Get(sessionID)
+	if err != nil {
+		return term.Info{}, err
+	}
+	if !ok || rec.WorkspaceID != workspaceID || rec.Title == "" {
+		return term.Info{}, errors.New("이 워크스페이스에서 이어갈 수 있는 세션이 아닙니다")
+	}
+	return a.startClaude(workspaceID, launch.ClaudeOptions{SessionID: sessionID, Resume: true}, cols, rows)
+}
+
+// StartQA opens Claude with "/qa-2pass <domain> <feature> <mode>". Only the
+// feature and mode values configured in the workspace's QA widget are accepted.
+func (a *App) StartQA(workspaceID, feature, mode string, cols, rows int) (term.Info, error) {
+	if err := a.unlocked(); err != nil {
+		return term.Info{}, err
+	}
+	ws, err := a.loadWorkspace(workspaceID)
+	if err != nil {
+		return term.Info{}, err
+	}
+	var s widgetdata.Settings
+	for _, inst := range ws.Widgets {
+		if inst.Type == widget.QA2Pass {
+			resolved, err := inst.ResolvedSettings()
+			if err != nil {
+				return term.Info{}, err
+			}
+			s = resolved
+		}
+	}
+	if s == nil {
+		return term.Info{}, errors.New("이 워크스페이스에 QA 위젯이 없습니다")
+	}
+	domain := s.String("domain", "")
+	if !slices.Contains(s.Strings("features"), feature) || !slices.Contains(qaModes, mode) || !filterPattern.MatchString(feature) {
+		return term.Info{}, errors.New("QA 위젯 설정에 없는 기능이나 모드입니다")
+	}
+	if domain != "" && !filterPattern.MatchString(domain) {
+		return term.Info{}, errors.New("QA 도메인 값이 올바르지 않습니다")
+	}
+	prompt := strings.TrimSpace(strings.Join([]string{"/qa-2pass", domain, feature, mode}, " "))
+	return a.startClaude(workspaceID, launch.ClaudeOptions{Prompt: prompt}, cols, rows)
+}
+
+// RestorableSessions lists sessions that were open when the app last exited.
+func (a *App) RestorableSessions() []sessions.Record {
+	if a.unlocked() != nil || a.deps.Restorable == nil {
+		return []sessions.Record{}
+	}
+	return a.deps.Restorable
 }
 
 // openClaude starts a Claude session connected to the bridge.
@@ -95,6 +162,10 @@ func (a *App) openClaude(workspaceID string, opts launch.ClaudeOptions, folders 
 		info, err = a.terms.Open(spec, cols, rows)
 		if err == nil {
 			a.agents.bindTerm(key, info.ID)
+			if a.deps.Sessions != nil {
+				now := a.now()
+				_ = a.deps.Sessions.Started(sessions.Record{SessionID: key, WorkspaceID: workspaceID, StartedAt: now, LastActive: now})
+			}
 			// The process may have exited before it was bound, in which case
 			// its exit event found nothing to clean up.
 			if !a.terms.Alive(info.ID) {

@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"sync/atomic"
 	"time"
 
+	"github.com/leeyounagh/work-dashboard/internal/claudeask"
 	"github.com/leeyounagh/work-dashboard/internal/github"
+	"github.com/leeyounagh/work-dashboard/internal/sessions"
 	"github.com/leeyounagh/work-dashboard/internal/term"
 	"github.com/leeyounagh/work-dashboard/internal/widget"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
@@ -59,6 +62,12 @@ type Deps struct {
 	Claude claudeAccount
 	// Now is the clock (nil = time.Now).
 	Now func() time.Time
+	// Ask runs headless claude for connector lookups (Linear, Notion).
+	Ask claudeask.Runner
+	// Sessions remembers Claude sessions for resuming.
+	Sessions sessionStore
+	// Restorable are sessions that were open when the app last exited.
+	Restorable []sessions.Record
 }
 
 // App holds the methods bound to the frontend.
@@ -68,6 +77,10 @@ type App struct {
 	terms  *term.Manager
 	agents *agentRegistry
 	prs    prCache
+	asks   askCache
+	// shuttingDown keeps sessions killed by app exit marked open, so they
+	// can be offered for restore next time.
+	shuttingDown atomic.Bool
 }
 
 // NewApp wires the app with its dependencies.
@@ -82,6 +95,7 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) shutdown(context.Context) {
+	a.shuttingDown.Store(true)
 	a.terms.CloseAll()
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -17,7 +18,10 @@ import (
 
 	"github.com/leeyounagh/work-dashboard/internal/bridge"
 	"github.com/leeyounagh/work-dashboard/internal/claudeacct"
+	"github.com/leeyounagh/work-dashboard/internal/claudeask"
 	"github.com/leeyounagh/work-dashboard/internal/github"
+	"github.com/leeyounagh/work-dashboard/internal/launch"
+	"github.com/leeyounagh/work-dashboard/internal/sessions"
 	"github.com/leeyounagh/work-dashboard/internal/term"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
@@ -37,6 +41,16 @@ func preferredShell() string {
 	return "powershell.exe"
 }
 
+// askClaude runs headless claude (resolved on each call, so installing Claude
+// Code while the app runs works).
+func askClaude(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	exe, err := exec.LookPath("claude")
+	if err != nil {
+		return nil, fmt.Errorf("claude 를 찾지 못했습니다: %w", err)
+	}
+	return claudeask.Claude(launch.ResolveExecutable(exe))(ctx, dir, args...)
+}
+
 func main() {
 	dir, err := workspace.DefaultDir()
 	if err != nil {
@@ -45,6 +59,12 @@ func main() {
 	runDir := filepath.Join(filepath.Dir(dir), "run")
 	if err := cleanRunDir(runDir); err != nil {
 		log.Printf("work-dashboard: could not clean %s: %v", runDir, err)
+	}
+
+	sessionStore := sessions.NewStore(filepath.Join(filepath.Dir(dir), "sessions.json"))
+	restorable, err := sessionStore.TakeOpenAtExit()
+	if err != nil {
+		log.Printf("work-dashboard: session history unavailable: %v", err)
 	}
 
 	var app *App
@@ -70,11 +90,14 @@ func main() {
 		PickFolder: func(ctx context.Context) (string, error) {
 			return runtime.OpenDirectoryDialog(ctx, runtime.OpenDialogOptions{Title: "워크스페이스에 추가할 폴더"})
 		},
-		DevLocked: devBuild && os.Getenv("WD_DEV_UNLOCK") != "1",
-		Bridge:    br,
-		GitHub:    github.GH,
-		Claude:    claudeacct.New(claudeacct.Options{}),
-		RunDir:    runDir,
+		DevLocked:  devBuild && os.Getenv("WD_DEV_UNLOCK") != "1",
+		Bridge:     br,
+		GitHub:     github.GH,
+		Ask:        askClaude,
+		Sessions:   sessionStore,
+		Restorable: restorable,
+		Claude:     claudeacct.New(claudeacct.Options{}),
+		RunDir:     runDir,
 	})
 
 	err = wails.Run(&options.App{

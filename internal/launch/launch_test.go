@@ -260,3 +260,13 @@ func TestCleanEnvDropsParentSessionMarkers(t *testing.T) {
 		t.Fatal("input must not be modified")
 	}
 }
+
+func TestResolveExecutable(t *testing.T) {
+	if got := ResolveExecutable(`C:\bin\claude.exe`); got != `C:\bin\claude.exe` {
+		t.Fatalf("exe changed: %q", got)
+	}
+	missing := filepath.Join(t.TempDir(), "claude.cmd")
+	if got := ResolveExecutable(missing); got != missing {
+		t.Fatalf("unresolvable shim must be returned as is: %q", got)
+	}
+}

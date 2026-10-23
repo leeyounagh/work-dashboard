@@ -19,9 +19,11 @@
         <div id="file-tree" class="file-tree"></div>
       </div>
     </section>
+    <div class="gutter gutter-col" data-split="side" style="grid-area: gl"></div>
     <section class="panel floor" aria-label="사무실">
       <canvas id="floor"></canvas>
     </section>
+    <div class="gutter gutter-row" data-split="floor" style="grid-area: gh"></div>
     <section class="panel terminal" aria-label="터미널과 파일">
       <header class="term-bar">
         <div id="editor-tabs" class="term-tabs" role="tablist"></div>
@@ -34,6 +36,7 @@
         <p id="editor-empty" class="muted editor-empty">워크스페이스를 고르고 + Claude 나 + 셸 로 터미널을 열거나, 왼쪽에서 파일을 여세요.</p>
       </div>
     </section>
+    <div class="gutter gutter-col" data-split="widgets" style="grid-area: gr"></div>
     <section class="panel widgets" aria-label="위젯" id="widget-board"></section>
   </div>
   <div id="toast" role="status"></div>

@@ -2,8 +2,9 @@ import '@xterm/xterm/css/xterm.css';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 
-import { OpenClaude, OpenShell, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { OpenClaude, OpenShell, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
+import { ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
+import { clipboardAction } from './clipboard';
 import { base64ToBytes } from '../lib/workspaceDraft';
 import type { TabHost } from '../tabs/tabHost';
 import { EarlyEvents, type TermExit } from './earlyEvents';
@@ -92,6 +93,25 @@ export class TerminalPanel {
   }
 
   async open(kind: TerminalKind, workspaceId: string): Promise<void> {
+    const openFn = kind === 'claude' ? OpenClaude : OpenShell;
+    return this.start(kind, workspaceId, (cols, rows) => openFn(workspaceId, cols, rows));
+  }
+
+  /** Resumes an earlier Claude session of a workspace. */
+  resume(workspaceId: string, sessionId: string): Promise<void> {
+    return this.start('claude', workspaceId, (cols, rows) => ResumeClaude(workspaceId, sessionId, cols, rows));
+  }
+
+  /** Runs a qa-2pass step for a workspace in a new Claude tab. */
+  startQA(workspaceId: string, feature: string, mode: string): Promise<void> {
+    return this.start('claude', workspaceId, (cols, rows) => StartQA(workspaceId, feature, mode, cols, rows));
+  }
+
+  private async start(
+    kind: TerminalKind,
+    workspaceId: string,
+    launch: (cols: number, rows: number) => Promise<{ id: string; title: string; dir: string }>,
+  ): Promise<void> {
     if (this.opening) return; // ignore double clicks while a process starts
     this.opening = true;
     const pane = document.createElement('div');
@@ -116,8 +136,7 @@ export class TerminalPanel {
       term.open(pane);
       fit.fit();
 
-      const openFn = kind === 'claude' ? OpenClaude : OpenShell;
-      const info = await openFn(workspaceId, term.cols, term.rows);
+      const info = await launch(term.cols, term.rows);
       session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane };
       dir = info.dir;
     } catch (err) {
@@ -139,6 +158,7 @@ export class TerminalPanel {
     session.term.onData((data) => {
       if (session.alive) TermWrite(session.id, data).catch((err) => this.onError(String(err)));
     });
+    this.wireClipboard(session);
     this.tabs.add({
       id: session.id,
       title: session.title,
@@ -155,6 +175,41 @@ export class TerminalPanel {
     for (const chunk of chunks) session.term.write(chunk);
     if (exit) this.markExited(session, exit);
     this.changed();
+  }
+
+  /**
+   * Windows Terminal style clipboard: Ctrl+C copies a selection (and is ^C
+   * otherwise), Ctrl+V pastes, right-click copies a selection or pastes.
+   */
+  private wireClipboard(session: Session) {
+    const { term } = session;
+    const copy = () => {
+      const text = term.getSelection();
+      if (!text) return;
+      ClipboardSetText(text).catch((err) => this.onError(`복사하지 못했습니다: ${String(err)}`));
+      term.clearSelection();
+    };
+    const paste = () => {
+      ClipboardGetText()
+        .then((text) => {
+          if (text && session.alive) term.paste(text); // paste() applies bracketed paste mode
+        })
+        .catch((err) => this.onError(`붙여넣지 못했습니다: ${String(err)}`));
+    };
+    term.attachCustomKeyEventHandler((e) => {
+      const action = clipboardAction(e, term.hasSelection());
+      if (!action) return true;
+      // Stop the browser's own paste event too, or the text would arrive twice.
+      e.preventDefault();
+      if (action === 'copy') copy();
+      else paste();
+      return false;
+    });
+    session.pane.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (term.hasSelection()) copy();
+      else paste();
+    });
   }
 
   private handleData(ev: TermData) {

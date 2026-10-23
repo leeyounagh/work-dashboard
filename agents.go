@@ -143,6 +143,10 @@ func (a *App) endAgentSession(termID string) {
 			_ = os.Remove(f)
 		}
 	}
+	// Sessions killed because the app is exiting stay "open" for restore.
+	if a.deps.Sessions != nil && !a.shuttingDown.Load() {
+		_ = a.deps.Sessions.Closed(key)
+	}
 }
 
 // onHook turns a Claude hook into UI events.
@@ -154,6 +158,9 @@ func (a *App) onHook(key string, ev bridge.HookEvent) {
 	a.deps.Emit(a.ctx, eventAgent, AgentEvent{
 		TermID: s.termID, Event: ev.Event, Tool: ev.ToolName, File: ev.FilePath(), Message: ev.Message,
 	})
+	if a.deps.Sessions != nil && (ev.Event == "UserPromptSubmit" || ev.Event == "Stop") {
+		_ = a.deps.Sessions.Touch(key, ev.Prompt, a.now())
+	}
 	if ev.Event == "PostToolUse" && ev.FilePath() != "" {
 		a.deps.Emit(a.ctx, eventFilesSeen, FilesEvent{
 			TermID: s.termID, WorkspaceID: s.workspaceID, Paths: []string{ev.FilePath()}, Tool: ev.ToolName,

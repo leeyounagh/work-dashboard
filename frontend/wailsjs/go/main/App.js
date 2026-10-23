@@ -42,8 +42,20 @@ export function RefreshWidget(arg1, arg2) {
   return window['go']['main']['App']['RefreshWidget'](arg1, arg2);
 }
 
+export function RestorableSessions() {
+  return window['go']['main']['App']['RestorableSessions']();
+}
+
+export function ResumeClaude(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ResumeClaude'](arg1, arg2, arg3, arg4);
+}
+
 export function SaveWorkspace(arg1) {
   return window['go']['main']['App']['SaveWorkspace'](arg1);
+}
+
+export function StartQA(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['StartQA'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function TermClose(arg1) {
