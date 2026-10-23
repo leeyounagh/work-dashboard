@@ -16,6 +16,8 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/leeyounagh/work-dashboard/internal/bridge"
+	"github.com/leeyounagh/work-dashboard/internal/claudeacct"
+	"github.com/leeyounagh/work-dashboard/internal/github"
 	"github.com/leeyounagh/work-dashboard/internal/term"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
@@ -70,6 +72,8 @@ func main() {
 		},
 		TerminalsLocked: devBuild && os.Getenv("WD_DEV_TERMINALS") != "1",
 		Bridge:          br,
+		GitHub:          github.GH,
+		Claude:          claudeacct.New(claudeacct.Options{}),
 		RunDir:          runDir,
 	})
 

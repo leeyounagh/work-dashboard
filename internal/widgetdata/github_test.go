@@ -69,17 +69,18 @@ func TestBuildPRReviewsAllReviewers(t *testing.T) {
 	if !slices.Equal(byNum[1].Highlights, []string{"changes-requested"}) {
 		t.Errorf("#1 highlights = %v", byNum[1].Highlights)
 	}
-	if !slices.Equal(byNum[2].Highlights, []string{"no-review", "needs-approval"}) {
+	// "no review" already says it all; "needs approval" is only for reviewed PRs.
+	if !slices.Equal(byNum[2].Highlights, []string{"no-review"}) {
 		t.Errorf("#2 highlights = %v", byNum[2].Highlights)
 	}
 	if len(byNum[3].Highlights) != 0 || byNum[3].Approvals != 1 {
 		t.Errorf("#3 = %+v", byNum[3])
 	}
-	if d.Summary != (PRSummary{Total: 3, NoReview: 1, ChangesRequested: 1, NeedsApproval: 1}) {
+	if d.Summary != (PRSummary{Total: 3, NoReview: 1, ChangesRequested: 1, NeedsApproval: 0}) {
 		t.Errorf("summary = %+v", d.Summary)
 	}
-	// Items needing attention come first.
-	if d.Items[0].Number != 2 {
+	// Items needing attention come first (oldest first among equals); the clean one last.
+	if d.Items[0].Number != 1 || d.Items[1].Number != 2 || d.Items[2].Number != 3 {
 		t.Errorf("order = %d, %d, %d", d.Items[0].Number, d.Items[1].Number, d.Items[2].Number)
 	}
 }

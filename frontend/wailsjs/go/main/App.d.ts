@@ -6,6 +6,8 @@ import {term} from '../models';
 import {workspace} from '../models';
 import {widget} from '../models';
 
+export function ClaudeStatus():Promise<main.ClaudeUsageData>;
+
 export function DeleteWorkspace(arg1:string):Promise<void>;
 
 export function FileDiff(arg1:string):Promise<string>;
@@ -22,6 +24,8 @@ export function PickFolder():Promise<string>;
 
 export function ReadFile(arg1:string):Promise<files.Content>;
 
+export function RefreshWidget(arg1:string,arg2:number):Promise<main.WidgetResult>;
+
 export function SaveWorkspace(arg1:workspace.Workspace):Promise<workspace.Workspace>;
 
 export function TermClose(arg1:string):Promise<void>;
@@ -33,5 +37,7 @@ export function TermWrite(arg1:string,arg2:string):Promise<void>;
 export function Terminals():Promise<Array<term.Info>>;
 
 export function WidgetCatalog():Promise<Array<widget.Definition>>;
+
+export function WidgetData(arg1:string,arg2:number):Promise<main.WidgetResult>;
 
 export function Workspaces():Promise<workspace.ListResult>;

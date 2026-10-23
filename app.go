@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"time"
 
+	"github.com/leeyounagh/work-dashboard/internal/github"
 	"github.com/leeyounagh/work-dashboard/internal/term"
 	"github.com/leeyounagh/work-dashboard/internal/widget"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
@@ -51,6 +53,12 @@ type Deps struct {
 	Bridge claudeBridge
 	// RunDir holds per-session bridge config files.
 	RunDir string
+	// GitHub runs the gh CLI.
+	GitHub github.Runner
+	// Claude reads the local Claude Code login and usage.
+	Claude claudeAccount
+	// Now is the clock (nil = time.Now).
+	Now func() time.Time
 }
 
 // App holds the methods bound to the frontend.
@@ -59,6 +67,7 @@ type App struct {
 	deps   Deps
 	terms  *term.Manager
 	agents *agentRegistry
+	prs    prCache
 }
 
 // NewApp wires the app with its dependencies.

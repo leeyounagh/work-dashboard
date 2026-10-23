@@ -9,7 +9,8 @@ import {
   Workspaces,
 } from '../wailsjs/go/main/App';
 import { workspace as models } from '../wailsjs/go/models';
-import { groupBySource, orEmpty, type Definition, type ListResult, type Workspace } from './lib/widgets';
+import { orEmpty, type Definition, type Instance, type ListResult, type Workspace } from './lib/widgets';
+import { WidgetBoard } from './widgets/board';
 import { addFolder, emptyDraft, isDirty, removeFolder } from './lib/workspaceDraft';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
@@ -18,12 +19,6 @@ import { mountFloor } from './office/floor';
 import { TabHost } from './tabs/tabHost';
 import { TerminalPanel, type TerminalKind } from './terminal/panel';
 import { renderSidebar, type SidebarHandlers, type SidebarState } from './workspaces/sidebar';
-
-const SOURCE_LABEL: Partial<Record<string, string>> = {
-  github: 'GitHub',
-  claude: 'Claude',
-  local: '로컬',
-};
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text: string) {
   const node = document.createElement(tag);
@@ -36,18 +31,6 @@ function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
   if (!node) throw new Error(`#${id} is missing from index.html`);
   return node as T;
-}
-
-function renderCatalog(target: HTMLElement, catalog: Definition[]) {
-  const items = groupBySource(catalog).flatMap((group) => [
-    el('li', 'group', SOURCE_LABEL[group.source] ?? group.source),
-    ...group.items.map((def) => {
-      const li = el('li', '', def.name);
-      li.title = def.description;
-      return li;
-    }),
-  ]);
-  target.replaceChildren(...items);
 }
 
 function startFloor(): (() => void) | undefined {
@@ -180,7 +163,22 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
     },
   };
 
-  return { reload };
+  /** Saves only the widget list, keeping unsaved name/notes/folder edits in the draft. */
+  const saveWidgets = async (widgets: Instance[]) => {
+    const current = saved();
+    if (!current) return;
+    try {
+      const result = await SaveWorkspace(models.Workspace.createFrom({ ...current, widgets }));
+      const workspaces = state.workspaces.map((w) => (w.id === result.id ? result : w));
+      const draft = state.draft ? { ...state.draft, widgets: result.widgets } : null;
+      state = { ...state, workspaces, draft };
+      render(false);
+    } catch (err) {
+      toast(String(err));
+    }
+  };
+
+  return { reload, saveWidgets };
 }
 
 function wireTerminalButtons(panel: TerminalPanel, getSelection: () => Selection) {
@@ -235,17 +233,21 @@ async function start() {
   });
 
   const updateButtons = wireTerminalButtons(panel, () => selection);
+  // eslint-disable-next-line prefer-const -- assigned after the controller that calls back into it
+  let board: WidgetBoard;
   const workspaces = createWorkspaceController((next) => {
     selection = next;
     updateButtons();
     tree.show(next.workspace); // re-renders only when the workspace or its folders changed
+    board?.show(next.workspace);
   });
+  board = new WidgetBoard(byId('widget-board'), workspaces.saveWidgets, toast);
 
-  const catalogEl = byId('catalog');
   // reload() reports its own errors in the sidebar.
   const [catalog] = await Promise.allSettled([WidgetCatalog(), workspaces.reload(null)]);
-  if (catalog.status === 'fulfilled') renderCatalog(catalogEl, orEmpty(catalog.value as Definition[]));
-  else catalogEl.replaceChildren(el('li', 'error', `위젯 목록을 불러오지 못했습니다: ${String(catalog.reason)}`));
+  if (catalog.status === 'fulfilled') board.setCatalog(orEmpty(catalog.value as Definition[]));
+  else toast(`위젯 목록을 불러오지 못했습니다: ${String(catalog.reason)}`);
+  board.show(selection.workspace);
 }
 
 start().catch((err) => {

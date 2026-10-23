@@ -130,7 +130,7 @@ func BuildPRReviews(prs []github.PR, s Settings) PRReviewsData {
 			item.Highlights = append(item.Highlights, "changes-requested")
 			d.Summary.ChangesRequested++
 		}
-		if item.Approvals < minApprovals && !changes {
+		if reviewed > 0 && item.Approvals < minApprovals && !changes {
 			item.Highlights = append(item.Highlights, "needs-approval")
 			d.Summary.NeedsApproval++
 		}

@@ -1,3 +1,125 @@
+export namespace claudeacct {
+	
+	export class Login {
+	    loggedIn: boolean;
+	    email: string;
+	    displayName: string;
+	    organization: string;
+	    role: string;
+	    billing: string;
+	    subscription: string;
+	    rateLimitTier: string;
+	    // Go type: time
+	    tokenExpiresAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Login(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.loggedIn = source["loggedIn"];
+	        this.email = source["email"];
+	        this.displayName = source["displayName"];
+	        this.organization = source["organization"];
+	        this.role = source["role"];
+	        this.billing = source["billing"];
+	        this.subscription = source["subscription"];
+	        this.rateLimitTier = source["rateLimitTier"];
+	        this.tokenExpiresAt = this.convertValues(source["tokenExpiresAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Window {
+	    key: string;
+	    label: string;
+	    percent: number;
+	    // Go type: time
+	    resetsAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Window(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.label = source["label"];
+	        this.percent = source["percent"];
+	        this.resetsAt = this.convertValues(source["resetsAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Usage {
+	    windows: Window[];
+	    // Go type: time
+	    fetchedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Usage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.windows = this.convertValues(source["windows"], Window);
+	        this.fetchedAt = this.convertValues(source["fetchedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace files {
 	
 	export class Content {
@@ -54,6 +176,81 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
 	    }
+	}
+	export class ClaudeUsageData {
+	    login: claudeacct.Login;
+	    usage: claudeacct.Usage;
+	    usageError?: string;
+	    alertPercent: number;
+	    alert: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClaudeUsageData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.login = this.convertValues(source["login"], claudeacct.Login);
+	        this.usage = this.convertValues(source["usage"], claudeacct.Usage);
+	        this.usageError = source["usageError"];
+	        this.alertPercent = source["alertPercent"];
+	        this.alert = source["alert"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WidgetResult {
+	    type: string;
+	    data?: any;
+	    error?: string;
+	    // Go type: time
+	    fetchedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new WidgetResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.data = source["data"];
+	        this.error = source["error"];
+	        this.fetchedAt = this.convertValues(source["fetchedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }
