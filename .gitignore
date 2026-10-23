@@ -1,0 +1,16 @@
+# build output
+build/bin
+frontend/dist/*
+!frontend/dist/.gitkeep
+node_modules
+
+# local-only config & secrets (never commit)
+.env
+*.local.json
+.work-dashboard/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
