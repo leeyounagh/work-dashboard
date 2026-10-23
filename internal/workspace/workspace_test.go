@@ -321,3 +321,19 @@ func TestNewIDAvoidsExistingRandomIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateWidgetKeysAreUnique(t *testing.T) {
+	ws := validWorkspace(t)
+	ws.Widgets = []widget.Instance{{Type: widget.PRReviews}, {Type: widget.PRReviews}}
+	if err := ws.Validate(); err == nil {
+		t.Fatal("two instances of a single widget must be rejected")
+	}
+	ws.Widgets = []widget.Instance{{Type: widget.Command, ID: "a"}, {Type: widget.Command, ID: "a"}}
+	if err := ws.Validate(); err == nil {
+		t.Fatal("duplicate custom ids must be rejected")
+	}
+	ws.Widgets = []widget.Instance{{Type: widget.Command, ID: "a"}, {Type: widget.Command, ID: "b"}, {Type: widget.Links, ID: "c"}}
+	if err := ws.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

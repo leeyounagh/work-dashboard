@@ -6,6 +6,10 @@ export function ClaudeStatus() {
   return window['go']['main']['App']['ClaudeStatus']();
 }
 
+export function CustomSprites() {
+  return window['go']['main']['App']['CustomSprites']();
+}
+
 export function DeleteWorkspace(arg1) {
   return window['go']['main']['App']['DeleteWorkspace'](arg1);
 }
@@ -36,6 +40,10 @@ export function PickFolder() {
 
 export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
+}
+
+export function RecommendWidgets(arg1, arg2) {
+  return window['go']['main']['App']['RecommendWidgets'](arg1, arg2);
 }
 
 export function RefreshWidget(arg1, arg2) {

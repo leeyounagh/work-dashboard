@@ -169,9 +169,9 @@ func (a *App) claudeData(ctx context.Context, alertPercent int) ClaudeUsageData 
 // minute; deploy status probes many slots.
 func widgetTimeout(typ string) time.Duration {
 	switch typ {
-	case widget.LinearIssues, widget.NotionSpecs:
+	case widget.LinearIssues, widget.LinearInbox, widget.NotionSpecs:
 		return 4 * time.Minute
-	case widget.DeploySwap:
+	case widget.DeploySwap, widget.Command:
 		return 2 * time.Minute
 	case widget.Worktrees:
 		return time.Minute

@@ -199,3 +199,29 @@ func TestResolvedSettingsDoesNotShareSlices(t *testing.T) {
 		t.Fatal("ResolvedSettings result shares a slice with the instance")
 	}
 }
+
+func TestCustomWidgetsAllowSeveralInstances(t *testing.T) {
+	def, ok := Lookup(Command)
+	if !ok || !def.Multiple {
+		t.Fatalf("command widget = %+v", def)
+	}
+	if d, _ := Lookup(PRReviews); d.Multiple {
+		t.Fatal("built-in data widgets stay single")
+	}
+	inst := Instance{Type: Command, ID: "command-1a2b", Title: "빌드 상태", Enabled: true, Settings: map[string]any{"command": "go version"}}
+	if err := inst.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []Instance{
+		{Type: Command},             // multiple types need an id
+		{Type: Command, ID: "../x"}, // id must be safe
+		{Type: Command, ID: "c1", Title: string(make([]rune, 61))}, // title too long
+	} {
+		if err := bad.Validate(); err == nil {
+			t.Errorf("%+v should be rejected", bad)
+		}
+	}
+	if (Instance{Type: Command, ID: "c1"}).Key() != "c1" || (Instance{Type: PRReviews}).Key() != PRReviews {
+		t.Fatal("Key")
+	}
+}

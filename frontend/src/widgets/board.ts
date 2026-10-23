@@ -17,6 +17,9 @@ import {
 import { formatSetting, parseSetting } from './settingsForm';
 import { renderLocal, type WidgetActions } from './localRenderers';
 import { collapseKey, loadCollapsed, saveCollapsed, toggleCollapsed, type Collapsed } from './collapse';
+import { removeWidget, renderManager, updateWidget, upsertWidget, widgetKey, type SaveWidgets } from './manager';
+
+export { upsertWidget, type SaveWidgets };
 import { makeSortable, moveBy, type Where } from '../lib/sortable';
 
 const AUTO_REFRESH_MS = 3 * 60 * 1000;
@@ -26,9 +29,6 @@ interface Result {
   data?: unknown;
   error?: string;
 }
-
-/** Saves a workspace's widget list; resolves false when saving failed. */
-export type SaveWidgets = (workspaceId: string, update: (prev: Instance[]) => Instance[]) => Promise<boolean>;
 
 const open = (url: string) => BrowserOpenURL(url);
 
@@ -50,16 +50,9 @@ export function renderData(type: string, data: unknown, actions?: WidgetActions)
   }
 }
 
-/** Adds or updates the instance of a widget type (one instance per type). */
-export function upsertWidget(prev: Instance[], type: string, change: (inst: Instance) => Instance): Instance[] {
-  const i = prev.findIndex((w) => w.type === type);
-  if (i < 0) return [...prev, change({ type, enabled: false, settings: {} })];
-  return prev.map((w, j) => (j === i ? change(w) : w));
-}
-
-/** Moves a widget (by type) before/after another one. */
+/** Moves a widget (by key) before/after another one. */
 export function moveWidget(prev: Instance[], from: string, to: string, where: Where): Instance[] {
-  return moveBy(prev, (w) => w.type, from, to, where);
+  return moveBy(prev, widgetKey, from, to, where);
 }
 
 /** Key for "already alerted": one per limit window, or per hour when the reset time is unknown. */
@@ -152,7 +145,7 @@ export class WidgetBoard {
     if (!ws?.id) {
       this.host.replaceChildren(head, this.globalClaudeCard());
     } else if (this.managing) {
-      this.host.replaceChildren(head, this.manager(ws));
+      this.host.replaceChildren(head, renderManager(ws, this.catalog, this.saveWidgets, this.toast, () => this.render()));
       return;
     } else {
       const cards = ws.widgets.map((inst, index) => ({ inst, index })).filter(({ inst }) => inst.enabled);
@@ -194,9 +187,9 @@ export class WidgetBoard {
 
   private card(ws: Workspace, inst: Instance, index: number): HTMLElement {
     const def = this.def(inst.type)!;
-    const key = collapseKey(ws.id, inst.type);
+    const key = collapseKey(ws.id, widgetKey(inst));
     const card = h('section', 'w-card');
-    card.dataset.sortKey = inst.type;
+    card.dataset.sortKey = widgetKey(inst);
     const title = h('div', 'w-card-head');
     const grip = h('span', 'w-grip', '⠿');
     grip.title = '드래그해서 순서 바꾸기';
@@ -207,7 +200,7 @@ export class WidgetBoard {
     gear.title = '이 위젯의 설정 바꾸기';
     const toggle = h('button', 'w-toggle');
     toggle.type = 'button';
-    toggle.append(h('span', 'w-chevron', '▾'), h('h3', 'w-title', def.name));
+    toggle.append(h('span', 'w-chevron', '▾'), h('h3', 'w-title', inst.title || def.name));
     title.append(grip, toggle, when, reload, gear);
     const body = h('div', 'w-body', '불러오는 중…');
     const settings = h('div', 'w-settings hidden');
@@ -288,7 +281,7 @@ export class WidgetBoard {
     const inputs = new Map<string, HTMLInputElement | HTMLSelectElement>();
     for (const spec of def.settings) {
       const current = inst.settings && spec.key in inst.settings ? inst.settings[spec.key] : spec.default;
-      const id = `w-${inst.type}-${spec.key}`;
+      const id = `w-${widgetKey(inst)}-${spec.key}`;
       const label = h('label', 'label', spec.label);
       label.htmlFor = id;
       let input: HTMLInputElement | HTMLSelectElement;
@@ -313,9 +306,30 @@ export class WidgetBoard {
       inputs.set(spec.key, input);
       form.append(label, input);
     }
+    // Repeatable widgets have their own name and can be deleted.
+    let titleInput: HTMLInputElement | null = null;
+    if (inst.id) {
+      titleInput = h('input', 'field');
+      titleInput.id = `w-${inst.id}-title`;
+      titleInput.value = inst.title ?? '';
+      titleInput.maxLength = 60;
+      const label = h('label', 'label', '위젯 이름');
+      label.htmlFor = titleInput.id;
+      form.prepend(label, titleInput);
+    }
     const save = h('button', 'primary', '저장');
     save.type = 'submit';
-    form.append(save);
+    const actions = h('div', 'actions');
+    actions.append(save);
+    if (inst.id) {
+      const del = h('button', 'danger', '위젯 삭제');
+      del.type = 'button';
+      del.addEventListener('click', () => {
+        if (window.confirm(`「${inst.title || def.name}」 위젯을 삭제할까요?`)) void this.saveWidgets(ws.id, (prev) => removeWidget(prev, inst.id!));
+      });
+      actions.append(del);
+    }
+    form.append(actions);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (save.disabled) return;
@@ -331,37 +345,12 @@ export class WidgetBoard {
         next[spec.key] = parsed.value;
       }
       save.disabled = true;
-      void this.saveWidgets(ws.id, (prev) => upsertWidget(prev, inst.type, (w) => ({ ...w, settings: next }))).finally(
-        () => (save.disabled = false),
-      );
+      const title = titleInput?.value.trim();
+      void this.saveWidgets(ws.id, (prev) =>
+        updateWidget(prev, widgetKey(inst), (w) => ({ ...w, settings: next, ...(title !== undefined ? { title } : {}) })),
+      ).finally(() => (save.disabled = false));
     });
     return form;
   }
 
-  private manager(ws: Workspace): HTMLElement {
-    const list = h('div', 'w-manager');
-    list.append(h('p', 'muted small', '이 워크스페이스에서 볼 위젯을 고르세요.'));
-    const boxes: HTMLInputElement[] = [];
-    for (const def of this.catalog) {
-      const inst = ws.widgets.find((w) => w.type === def.id);
-      const row = h('label', 'w-manage-row');
-      const box = h('input');
-      box.type = 'checkbox';
-      box.checked = Boolean(inst?.enabled);
-      box.addEventListener('change', async () => {
-        const enabled = box.checked;
-        for (const b of boxes) b.disabled = true; // one save at a time
-        const ok = await this.saveWidgets(ws.id, (prev) => upsertWidget(prev, def.id, (w) => ({ ...w, enabled })));
-        // On failure re-render from the real state; on success show() re-renders.
-        if (!ok) this.render();
-        else for (const b of boxes) b.disabled = false;
-      });
-      boxes.push(box);
-      const text = h('span', '');
-      text.append(h('strong', '', def.name), h('span', 'muted small-inline', ` ${def.description}`));
-      row.append(box, text);
-      list.append(row);
-    }
-    return list;
-  }
 }

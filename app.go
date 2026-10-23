@@ -67,6 +67,8 @@ type Deps struct {
 	Ask claudeask.Runner
 	// Sessions remembers Claude sessions for resuming.
 	Sessions sessionStore
+	// CharactersDir holds the user's own character sprite sheets.
+	CharactersDir string
 	// Restorable are sessions that were open when the app last exited.
 	Restorable []sessions.Record
 }

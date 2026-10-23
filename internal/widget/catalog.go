@@ -19,12 +19,15 @@ const (
 	CIFailures     = "ci-failures"
 	ReviewQueue    = "review-queue"
 	LinearIssues   = "linear-issues"
+	LinearInbox    = "linear-inbox"
 	NotionSpecs    = "notion-specs"
 	DeploySwap     = "deploy-swap"
 	Worktrees      = "worktrees"
 	QA2Pass        = "qa-2pass"
 	ClaudeUsage    = "claude-usage"
 	SessionRestore = "session-restore"
+	Command        = "command"
+	Links          = "links"
 )
 
 // Definition describes a widget type the dashboard can render.
@@ -34,6 +37,8 @@ type Definition struct {
 	Description string        `json:"description"`
 	Source      Source        `json:"source"`
 	Settings    []SettingSpec `json:"settings"`
+	// Multiple widgets can be added several times, each with its own id and title.
+	Multiple bool `json:"multiple"`
 }
 
 var prScope = []string{"mine", "review-requested", "both"}
@@ -81,6 +86,15 @@ var catalog = []Definition{
 		Settings: []SettingSpec{
 			{Key: "teams", Label: "팀 키 (비우면 전체)", Kind: KindStringList, Default: []string{}},
 			{Key: "states", Label: "상태 (비우면 전체)", Kind: KindStringList, Default: []string{}},
+		},
+	},
+	{
+		ID:          LinearInbox,
+		Name:        "Linear 알림",
+		Description: "Claude에 연결된 Linear 커넥터로 가져온 내 알림(멘션·배정·댓글·상태 변경)",
+		Source:      SourceClaude,
+		Settings: []SettingSpec{
+			{Key: "unreadOnly", Label: "안 읽은 것만", Kind: KindBool, Default: true},
 		},
 	},
 	{
@@ -150,6 +164,32 @@ func cloneDefinition(def Definition) Definition {
 	}
 	def.Settings = settings
 	return def
+}
+
+func init() {
+	catalog = append(catalog,
+		Definition{
+			ID:          Command,
+			Name:        "명령 출력",
+			Description: "원하는 명령의 출력을 보여 줍니다 (예: git log --oneline -5, pnpm outdated). 셸 없이 실행합니다",
+			Source:      SourceLocal,
+			Multiple:    true,
+			Settings: []SettingSpec{
+				{Key: "command", Label: "명령", Kind: KindString, Default: ""},
+				{Key: "lines", Label: "보여 줄 마지막 줄 수", Kind: KindInt, Default: 40, Min: 1, Max: 500},
+			},
+		},
+		Definition{
+			ID:          Links,
+			Name:        "링크 모음",
+			Description: "자주 여는 링크 (이름=https://… 형식, 쉼표로 구분)",
+			Source:      SourceLocal,
+			Multiple:    true,
+			Settings: []SettingSpec{
+				{Key: "links", Label: "링크 (이름=URL)", Kind: KindStringList, Default: []string{}},
+			},
+		},
+	)
 }
 
 // Catalog returns a deep copy of every widget definition.

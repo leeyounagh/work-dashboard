@@ -53,10 +53,15 @@ func (w Workspace) Validate() error {
 		}
 		seen[key] = true
 	}
+	keys := make(map[string]bool, len(w.Widgets))
 	for i, inst := range w.Widgets {
 		if err := inst.Validate(); err != nil {
 			return fmt.Errorf("workspace %s: widget #%d: %w", w.ID, i, err)
 		}
+		if keys[inst.Key()] {
+			return fmt.Errorf("workspace %s: widget %q appears twice", w.ID, inst.Key())
+		}
+		keys[inst.Key()] = true
 	}
 	return nil
 }

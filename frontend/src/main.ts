@@ -4,6 +4,7 @@ import './styles/app.css';
 import {
   DeleteWorkspace,
   PickFolder,
+  CustomSprites,
   RestorableSessions,
   SearchFiles,
   SaveWorkspace,
@@ -39,6 +40,7 @@ import { EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { Office } from './office/office';
+import { useCustomSheets } from './office/sprites';
 import { mountSplitters } from './layout/splitters';
 import { TabHost } from './tabs/tabHost';
 import { TerminalPanel, type TerminalKind } from './terminal/panel';
@@ -62,6 +64,7 @@ interface AgentEvent {
   event: string;
   tool?: string;
   message?: string;
+  progress?: { done: number; total: number; current?: string } | null;
 }
 
 /**
@@ -92,6 +95,15 @@ function startOffice(
     );
   };
   panel.onChange(refresh);
+  // The user's own characters (~/.work-dashboard/characters), if any.
+  CustomSprites()
+    .then((urls) => {
+      if (urls?.length) {
+        useCustomSheets(urls);
+        office.reloadArt();
+      }
+    })
+    .catch(() => {});
   const off = EventsOn('agent:event', (ev: AgentEvent) => office.event(ev.termId, ev));
   return {
     refresh,

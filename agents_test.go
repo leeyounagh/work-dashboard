@@ -213,3 +213,37 @@ func TestSearchFiles(t *testing.T) {
 		t.Fatal("unknown workspace must fail")
 	}
 }
+
+func TestTodoProgressFromHooks(t *testing.T) {
+	h := newHarness(t)
+	_, termID := openTestClaude(t, h)
+	h.app.onHook("sess-1", bridge.HookEvent{Event: "PostToolUse", ToolName: "TodoWrite", ToolInput: map[string]any{
+		"todos": []any{
+			map[string]any{"content": "a", "status": "completed", "activeForm": "A 하는 중"},
+			map[string]any{"content": "b", "status": "in_progress", "activeForm": "테스트 실행 중"},
+			map[string]any{"content": "c", "status": "pending", "activeForm": "C"},
+		},
+	}})
+	ev := waitEvents(t, h, eventAgent, 1)[0].(AgentEvent)
+	if ev.TermID != termID || ev.Progress == nil || ev.Progress.Done != 1 || ev.Progress.Total != 3 || ev.Progress.Current != "테스트 실행 중" {
+		t.Fatalf("event = %+v progress = %+v", ev, ev.Progress)
+	}
+	// Other tools carry no progress.
+	h.app.onHook("sess-1", bridge.HookEvent{Event: "PreToolUse", ToolName: "Read"})
+	if ev := waitEvents(t, h, eventAgent, 2)[1].(AgentEvent); ev.Progress != nil {
+		t.Fatalf("unexpected progress: %+v", ev.Progress)
+	}
+}
+
+func TestTodoProgressIgnoresJunk(t *testing.T) {
+	for _, input := range []map[string]any{
+		nil,
+		{"todos": "nope"},
+		{"todos": []any{"x", 3}},
+		{"todos": []any{}},
+	} {
+		if p := todoProgress(input); p != nil {
+			t.Errorf("todoProgress(%v) = %+v, want nil", input, p)
+		}
+	}
+}

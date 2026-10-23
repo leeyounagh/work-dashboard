@@ -3,15 +3,32 @@ package widget
 import (
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
+	"unicode/utf8"
 )
 
 // Instance is a widget placed in a workspace. Settings holds only the values
 // the user overrode; missing keys fall back to the definition defaults.
 type Instance struct {
 	Type     string         `json:"type"`
+	ID       string         `json:"id,omitempty"`    // required for widgets that can be added several times
+	Title    string         `json:"title,omitempty"` // user-chosen card title
 	Enabled  bool           `json:"enabled"`
 	Settings map[string]any `json:"settings,omitempty"`
+}
+
+var instanceID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
+
+const maxTitle = 60
+
+// Key identifies the instance within a workspace: its id for repeatable
+// widgets, otherwise its type.
+func (i Instance) Key() string {
+	if i.ID != "" {
+		return i.ID
+	}
+	return i.Type
 }
 
 // NewInstance creates an enabled instance with no overrides, so it follows
@@ -28,6 +45,15 @@ func (i Instance) Validate() error {
 	def, ok := find(i.Type)
 	if !ok {
 		return fmt.Errorf("unknown widget %q", i.Type)
+	}
+	if def.Multiple && !instanceID.MatchString(i.ID) {
+		return fmt.Errorf("%s: id %q must be lowercase letters, digits and dashes", i.Type, i.ID)
+	}
+	if !def.Multiple && i.ID != "" {
+		return fmt.Errorf("%s: this widget cannot have an id", i.Type)
+	}
+	if utf8.RuneCountInString(i.Title) > maxTitle {
+		return fmt.Errorf("%s: title is longer than %d characters", i.Type, maxTitle)
 	}
 	// Sorted so the reported error is deterministic.
 	for _, key := range slices.Sorted(maps.Keys(i.Settings)) {

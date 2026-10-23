@@ -1,4 +1,4 @@
-import { DESK_H, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, type AgentState, type HookInput } from './agentState';
+import { DESK_H, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
 import { drawDesk, drawRoom, drawRug } from './background';
 import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, frameRect, pickSheet, sheets, type Direction } from './sprites';
 
@@ -47,7 +47,7 @@ const short = (text: string, max: number) => (text.length > max ? `${text.slice(
 export class Office {
   private readonly chars = new Map<string, Character>();
   private readonly ctx: CanvasRenderingContext2D;
-  private readonly art = sheets();
+  private art = sheets();
   private frame = 0;
   private last = 0;
   private tick = 0;
@@ -83,6 +83,14 @@ export class Office {
       canvas.removeEventListener('mousemove', onMove);
     });
     this.frame = requestAnimationFrame((t) => this.loop(t));
+  }
+
+  /** Reloads the character sheets (after custom sprites were found). */
+  reloadArt(): void {
+    this.art = sheets();
+    for (const c of this.chars.values()) {
+      if (!c.dog) c.sheet = pickSheet(c.term.id, c.term.kind, this.art.ninjas, this.art.dog);
+    }
   }
 
   /** Keeps one character per terminal shown. */
@@ -197,7 +205,7 @@ export class Office {
   private draw(now: number) {
     const { ctx, width: w, height: h } = this;
     drawRoom(ctx, w, h, WALL_H);
-    drawRug(ctx, w, this.deskAreaBottom() || WALL_H, h);
+    if (this.chars.size) drawRug(ctx, w, this.deskAreaBottom(), h);
 
     if (!this.chars.size) {
       ctx.fillStyle = COLORS.label;
@@ -276,8 +284,33 @@ export class Office {
     ctx.fillStyle = COLORS.label;
     ctx.fillText(short(c.term.workspace, 16), c.x, c.y + 13);
 
+    // Progress of the current request sits between the name and the bubble.
+    const progress = c.term.alive ? progressOf(c.state, now) : null;
+    if (progress) this.drawProgress(progress, c.x, y - 18);
+    const bubbleBottom = progress ? y - 40 : y - 18;
     const text = c.term.alive ? bubbleFor(c.state) : 'zZ';
-    if (text && !(c.state.mood === 'waiting' && this.tick % 8 >= 6)) this.drawBubble(text, c.x, y - 18, c.state.mood === 'waiting');
+    if (text && !(c.state.mood === 'waiting' && this.tick % 8 >= 6)) this.drawBubble(text, c.x, bubbleBottom, c.state.mood === 'waiting');
+  }
+
+  /** A small bar (to-do fraction) and a label (2/5 step, or tools · time) above the name. */
+  private drawProgress(p: { fraction: number | null; text: string }, cx: number, bottom: number) {
+    const { ctx } = this;
+    const w = 64;
+    const x = Math.round(cx - w / 2);
+    if (p.fraction !== null) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(x, bottom - 6, w, 5);
+      ctx.fillStyle = '#73c991';
+      ctx.fillRect(x, bottom - 6, Math.round(w * Math.min(1, p.fraction)), 5);
+    }
+    ctx.font = `10px ${FONT}`;
+    ctx.textAlign = 'center';
+    const label = short(p.text, 18);
+    const tw = ctx.measureText(label).width + 8;
+    ctx.fillStyle = 'rgba(20,21,24,0.75)';
+    ctx.fillRect(Math.round(cx - tw / 2), bottom - 20, Math.round(tw), 13);
+    ctx.fillStyle = '#e3e5e8';
+    ctx.fillText(label, cx, bottom - 10);
   }
 
   private drawBubble(text: string, cx: number, bottom: number, alert: boolean) {

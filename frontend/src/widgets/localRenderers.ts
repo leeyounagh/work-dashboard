@@ -206,6 +206,66 @@ export function renderSessions(d: SessionsData, actions?: WidgetActions): HTMLEl
   return box;
 }
 
+interface CommandData {
+  text: string;
+  exitCode: number;
+  truncated: boolean;
+}
+
+interface LinksData {
+  links: Array<{ name: string; url: string }> | null;
+  invalid: string[] | null;
+}
+
+interface LinearInboxData {
+  notifications: Array<{ id: string; kind: string; title: string; actor: string; createdAt: string; read: boolean; url: string }> | null;
+  unread: number;
+  fetchedAt: string;
+  costUsd: number;
+}
+
+const KIND_LABEL: Record<string, string> = {
+  mention: '멘션',
+  assigned: '배정',
+  comment: '댓글',
+  status: '상태',
+  review: '리뷰',
+};
+
+export function renderCommand(d: CommandData): HTMLElement {
+  const box = h('div', 'w-list');
+  box.append(h('pre', 'w-json', d.text || '(출력 없음)'));
+  if (d.exitCode) box.append(h('p', 'error small', `종료 코드 ${d.exitCode}`));
+  return box;
+}
+
+export function renderLinks(d: LinksData, open: OpenURL): HTMLElement {
+  const box = h('div', 'w-links');
+  const links = d.links ?? [];
+  if (!links.length) box.append(h('p', 'muted small', '「설정」에서 이름=https://… 형식으로 링크를 넣으세요.'));
+  for (const l of links) box.append(link(l.name, l.url, open, 'ghost small-btn'));
+  for (const bad of d.invalid ?? []) box.append(h('p', 'warn small', `형식이 맞지 않아 뺐습니다: ${bad}`));
+  return box;
+}
+
+export function renderLinearInbox(d: LinearInboxData, open: OpenURL): HTMLElement {
+  const box = h('div', 'w-list');
+  const items = d.notifications ?? [];
+  box.append(h('div', 'w-summary', `안 읽음 ${d.unread} · ${items.length}건`));
+  if (!items.length) box.append(h('p', 'muted small', '새 알림이 없습니다.'));
+  for (const n of items) {
+    const item = h('div', n.read ? 'w-item' : 'w-item attention');
+    const title = h('div', 'w-pr-title');
+    title.append(h('span', 'w-chip muted', KIND_LABEL[n.kind] ?? n.kind), n.url ? link(n.title, n.url, open, 'w-link w-pr-text') : h('span', 'w-pr-text', n.title));
+    const meta = h('div', 'w-meta');
+    meta.append(h('span', 'muted', n.actor), h('span', 'muted', dateText(n.createdAt)));
+    item.append(title, meta);
+    box.append(item);
+  }
+  box.append(costNote(d.fetchedAt, d.costUsd));
+  return box;
+}
+
 /** Renderers for local / Claude-connector widgets; null when the type is not one of them. */
 export function renderLocal(type: string, data: unknown, open: OpenURL, actions?: WidgetActions): HTMLElement | null {
   switch (type) {
@@ -221,6 +281,12 @@ export function renderLocal(type: string, data: unknown, open: OpenURL, actions?
       return renderQA(data as QAData, actions);
     case 'session-restore':
       return renderSessions(data as SessionsData, actions);
+    case 'command':
+      return renderCommand(data as CommandData);
+    case 'links':
+      return renderLinks(data as LinksData, open);
+    case 'linear-inbox':
+      return renderLinearInbox(data as LinearInboxData, open);
     default:
       return null;
   }

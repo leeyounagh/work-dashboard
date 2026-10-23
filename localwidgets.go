@@ -38,10 +38,12 @@ var (
 		"mcp__linear__list_issues", "mcp__linear__get_issue", "mcp__linear__list_teams",
 		"mcp__linear__list_issue_statuses", "mcp__linear__get_user",
 	}
+	linearInboxTools = []string{"mcp__linear__get_notifications", "mcp__linear__get_issue", "mcp__linear__get_user"}
 	linearWriteTools = []string{
 		"mcp__linear__save_issue", "mcp__linear__save_comment", "mcp__linear__delete_comment",
 		"mcp__linear__create_attachment", "mcp__linear__delete_attachment", "mcp__linear__share_issue",
 		"mcp__linear__save_project", "mcp__linear__save_document", "mcp__linear__merge_diff",
+		"mcp__linear__mark_notification",
 	}
 	notionReadTools  = []string{"mcp__claude_ai_Notion__notion-fetch"}
 	notionWriteTools = []string{
@@ -180,12 +182,18 @@ func (a *App) buildLocalWidget(ctx context.Context, ws workspace.Workspace, typ 
 		return a.deploy(ctx, ws, s)
 	case widget.LinearIssues:
 		return a.linear(ctx, s, fresh)
+	case widget.LinearInbox:
+		return a.linearInbox(ctx, s, fresh)
 	case widget.NotionSpecs:
 		return a.notion(ctx, s, fresh)
 	case widget.QA2Pass:
 		return a.qa(s)
 	case widget.SessionRestore:
 		return a.sessionsData(ws, s)
+	case widget.Command:
+		return a.commandWidget(ctx, ws, s)
+	case widget.Links:
+		return linksWidget(s), nil
 	default:
 		return PlannedData{Planned: true, Message: typ + " 위젯은 아직 지원하지 않습니다"}, nil
 	}
@@ -431,4 +439,126 @@ func (a *App) sessionsData(ws workspace.Workspace, s widgetdata.Settings) (Sessi
 		d.Recent = recent
 	}
 	return d, nil
+}
+
+// CommandData feeds the command output widget.
+type CommandData struct {
+	Text      string `json:"text"`
+	ExitCode  int    `json:"exitCode"`
+	Truncated bool   `json:"truncated"`
+}
+
+// lastLines keeps the end of a command's output, where results usually are.
+func lastLines(text string, n int) string {
+	lines := strings.Split(strings.TrimRight(strings.ReplaceAll(text, "\r\n", "\n"), "\n"), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (a *App) commandWidget(ctx context.Context, ws workspace.Workspace, s widgetdata.Settings) (CommandData, error) {
+	line := s.String("command", "")
+	if line == "" {
+		return CommandData{}, errors.New("설정에서 실행할 명령을 입력하세요")
+	}
+	dir, _ := os.UserHomeDir()
+	if len(ws.Folders) > 0 {
+		dir = ws.Folders[0]
+	}
+	out, err := command.Run(ctx, dir, line)
+	if err != nil {
+		return CommandData{}, err
+	}
+	text := out.Stdout
+	if strings.TrimSpace(text) == "" {
+		text = out.Stderr
+	}
+	return CommandData{Text: lastLines(text, s.Int("lines", 40)), ExitCode: out.ExitCode, Truncated: out.Truncated}, nil
+}
+
+// Link is one entry of the links widget.
+type Link struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// LinksData feeds the links widget.
+type LinksData struct {
+	Links   []Link   `json:"links"`
+	Invalid []string `json:"invalid"` // entries that are not name=http(s) URL
+}
+
+func linksWidget(s widgetdata.Settings) LinksData {
+	d := LinksData{Links: []Link{}, Invalid: []string{}}
+	for _, item := range s.Strings("links") {
+		name, url, ok := strings.Cut(item, "=")
+		name, url = strings.TrimSpace(name), strings.TrimSpace(url)
+		if !ok || name == "" || !(strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://")) {
+			d.Invalid = append(d.Invalid, item)
+			continue
+		}
+		d.Links = append(d.Links, Link{Name: name, URL: url})
+	}
+	return d
+}
+
+// LinearNotification is one inbox entry reported through the Linear connector.
+type LinearNotification struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"` // mention, assigned, comment, status, ...
+	Title     string `json:"title"`
+	Actor     string `json:"actor"`
+	CreatedAt string `json:"createdAt"`
+	Read      bool   `json:"read"`
+	URL       string `json:"url"`
+}
+
+// LinearInboxData feeds the Linear notifications widget.
+type LinearInboxData struct {
+	Notifications []LinearNotification `json:"notifications"`
+	Unread        int                  `json:"unread"`
+	FetchedAt     time.Time            `json:"fetchedAt"`
+	CostUSD       float64              `json:"costUsd"`
+}
+
+var linearInboxSchema = json.RawMessage(`{"type":"object","properties":{"connectorAvailable":{"type":"boolean"},
+"notifications":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string"},
+"title":{"type":"string"},"actor":{"type":"string"},"createdAt":{"type":"string"},"read":{"type":"boolean"},
+"url":{"type":"string"}},"required":["id","title"]}}},"required":["connectorAvailable","notifications"]}`)
+
+func (a *App) linearInbox(ctx context.Context, s widgetdata.Settings, fresh bool) (any, error) {
+	unreadOnly := s.Bool("unreadOnly", true)
+	prompt := "Using the Linear MCP tools, list my most recent Linear notifications (at most 30), newest first."
+	if unreadOnly {
+		prompt += " Include only unread notifications."
+	}
+	prompt += " For each give id, kind (mention, assigned, comment, status, review, other), a short title naming the issue," +
+		" the actor, createdAt, whether it is read, and the issue url. Set connectorAvailable to false if no Linear tools" +
+		" are available. Do not mark anything as read and do not change anything in Linear."
+	key := fmt.Sprintf("linear-inbox:%v", unreadOnly)
+	return a.cachedAsk(key, fresh, func() (any, error) {
+		var out struct {
+			ConnectorAvailable bool                 `json:"connectorAvailable"`
+			Notifications      []LinearNotification `json:"notifications"`
+		}
+		cost, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: linearInboxSchema, AllowedTools: linearInboxTools, DisallowedTools: linearWriteTools}, &out)
+		if err != nil {
+			return nil, err
+		}
+		if !out.ConnectorAvailable {
+			return nil, errNoConnector
+		}
+		d := LinearInboxData{Notifications: []LinearNotification{}, FetchedAt: time.Now(), CostUSD: cost}
+		for _, n := range out.Notifications {
+			if !linearURL.MatchString(n.URL) {
+				n.URL = ""
+			}
+			if !n.Read {
+				d.Unread++
+			}
+			d.Notifications = append(d.Notifications, n)
+		}
+		return d, nil
+	})
 }

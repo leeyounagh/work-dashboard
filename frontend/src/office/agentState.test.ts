@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WALL_H, bubbleFor, deskSpot, nextState, type AgentState } from './agentState';
+import { WALL_H, bubbleFor, deskSpot, nextState, progressOf, type AgentState } from './agentState';
 
 const idle: AgentState = { mood: 'idle', tool: '', since: 0 };
 
@@ -8,7 +8,7 @@ describe('nextState', () => {
     let s = nextState(idle, { event: 'UserPromptSubmit' }, 1);
     expect(s.mood).toBe('thinking');
     s = nextState(s, { event: 'PreToolUse', tool: 'Edit' }, 2);
-    expect(s).toEqual({ mood: 'working', tool: 'Edit', since: 2 });
+    expect(s).toMatchObject({ mood: 'working', tool: 'Edit', since: 2, tools: 1 });
     s = nextState(s, { event: 'PostToolUse', tool: 'Edit' }, 3);
     expect(s.mood).toBe('thinking');
     s = nextState(s, { event: 'Stop' }, 4);
@@ -51,5 +51,30 @@ describe('deskSpot', () => {
     // Distinct spots, all below the bookshelf wall.
     expect(new Set(spots.map((s) => `${s.x},${s.y}`)).size).toBe(8);
     expect(Math.min(...spots.map((s) => s.y))).toBeGreaterThanOrEqual(WALL_H);
+  });
+});
+
+describe('progress', () => {
+  it('counts tool calls and time since the prompt when there is no to-do list', () => {
+    let s = nextState(idle, { event: 'UserPromptSubmit' }, 1000);
+    s = nextState(s, { event: 'PreToolUse', tool: 'Read' }, 2000);
+    s = nextState(s, { event: 'PostToolUse', tool: 'Read' }, 3000);
+    s = nextState(s, { event: 'PreToolUse', tool: 'Edit' }, 4000);
+    expect(progressOf(s, 1000 + 133_000)).toEqual({ fraction: null, text: '도구 2 · 2:13' });
+  });
+
+  it('uses the to-do list when Claude keeps one', () => {
+    let s = nextState(idle, { event: 'UserPromptSubmit' }, 0);
+    s = nextState(s, { event: 'PostToolUse', tool: 'TodoWrite', progress: { done: 2, total: 5, current: '테스트 실행 중' } }, 10);
+    expect(progressOf(s, 20)).toEqual({ fraction: 0.4, text: '2/5 테스트 실행 중' });
+  });
+
+  it('shows nothing when idle and resets on the next prompt', () => {
+    let s = nextState(idle, { event: 'UserPromptSubmit' }, 0);
+    s = nextState(s, { event: 'PostToolUse', tool: 'TodoWrite', progress: { done: 1, total: 2 } }, 1);
+    s = nextState(s, { event: 'Stop' }, 2);
+    expect(progressOf(s, 3)).toBeNull();
+    s = nextState(s, { event: 'UserPromptSubmit' }, 4);
+    expect(progressOf(s, 4)?.fraction).toBeNull();
   });
 });

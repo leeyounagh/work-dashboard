@@ -10,7 +10,7 @@ A lightweight desktop work dashboard for Claude Code users.
 Inspired by [Munder Difflin](https://github.com/HarnessMD/munder-difflin), rebuilt small:
 a single ~10 MB Windows executable (Wails + the system WebView2) instead of an Electron app.
 
-> Status: phase 1 — workspaces and embedded terminals work. See the roadmap below.
+> Status: all roadmap phases are in. See the roadmap below.
 
 ## Requirements
 
@@ -38,6 +38,19 @@ cd frontend && npm test
 > origin, so any web page open in a browser could call the bound methods. Every method that runs
 > commands or returns local data is therefore disabled in dev builds unless you start with
 > `WD_DEV_UNLOCK=1`; don't browse untrusted sites while doing so. Release builds are not affected.
+
+## Widgets
+
+Open **위젯 관리** on the right: switch built-in widgets on/off, add your own **명령 출력** (any
+command's output, no shell) or **링크 모음** widgets as many times as you like, or ask Claude for
+suggestions in plain words. Linear and Notion widgets go through the connectors you already set up
+in Claude Code, with read-only tools only.
+
+## Your own characters
+
+The office uses the CC0 Ninja Adventure characters. To use other art you are allowed to use,
+put sprite sheets in `~/.work-dashboard/characters/*.png` (64×112: 4 columns down/up/left/right ×
+7 rows of 16×16, rows 0–3 walking, row 4 action). They stay on your computer.
 
 ## Local data
 

@@ -103,14 +103,15 @@ func main() {
 		PickFolder: func(ctx context.Context) (string, error) {
 			return runtime.OpenDirectoryDialog(ctx, runtime.OpenDialogOptions{Title: "워크스페이스에 추가할 폴더"})
 		},
-		DevLocked:  devBuild && os.Getenv("WD_DEV_UNLOCK") != "1",
-		Bridge:     br,
-		GitHub:     github.GH,
-		Ask:        askClaude,
-		Sessions:   sessionStore,
-		Restorable: restorable,
-		Claude:     claudeacct.New(claudeacct.Options{}),
-		RunDir:     runDir,
+		DevLocked:     devBuild && os.Getenv("WD_DEV_UNLOCK") != "1",
+		Bridge:        br,
+		GitHub:        github.GH,
+		Ask:           askClaude,
+		Sessions:      sessionStore,
+		Restorable:    restorable,
+		CharactersDir: filepath.Join(filepath.Dir(dir), "characters"),
+		Claude:        claudeacct.New(claudeacct.Options{}),
+		RunDir:        runDir,
 	})
 
 	err = wails.Run(&options.App{

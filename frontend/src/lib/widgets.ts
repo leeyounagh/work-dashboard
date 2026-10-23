@@ -19,10 +19,13 @@ export interface Definition {
   description: string;
   source: Source;
   settings: SettingSpec[];
+  multiple?: boolean; // can be added several times, each with id and title
 }
 
 export interface Instance {
   type: string;
+  id?: string;
+  title?: string;
   enabled: boolean;
   settings?: Record<string, unknown>;
 }

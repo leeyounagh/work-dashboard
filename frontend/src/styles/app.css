@@ -237,7 +237,7 @@ textarea.field { resize: vertical; }
 .w-pr-num { white-space: nowrap; flex-shrink: 0; }
 .w-pr-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .w-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; font-size: 11px; }
-.w-chip { padding: 0 6px; border-radius: 8px; background: var(--panel); font-size: 11px; }
+.w-chip { padding: 0 6px; border-radius: 8px; background: var(--panel); font-size: 11px; white-space: nowrap; flex-shrink: 0; }
 .w-chip.warn, .w-reviewer.warn, .warn { color: var(--warn); }
 .w-chip.danger, .w-reviewer.danger, .danger { color: var(--danger); }
 .w-reviewer.ok, .ok { color: var(--ok); }
@@ -296,3 +296,6 @@ body.resizing-col .tab-pane, body.resizing-row .tab-pane, body.resizing-col canv
 .term-tab-input { width: 140px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 4px; }
 
 .file-search { margin: 6px 8px 0; width: calc(100% - 16px); }
+
+.w-section { margin: 12px 0 4px; font-size: 12px; color: var(--text-muted); }
+.w-links { display: flex; flex-wrap: wrap; gap: 6px; }

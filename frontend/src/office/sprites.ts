@@ -57,12 +57,23 @@ function image(url: string): HTMLImageElement {
   return img;
 }
 
+let custom: string[] = [];
+
+/**
+ * Uses the user's own sheets (data URLs from ~/.work-dashboard/characters,
+ * same 4×7 layout) instead of the bundled ninjas for new characters.
+ */
+export function useCustomSheets(urls: string[]): void {
+  custom = urls;
+}
+
 /** The character sheets and the dog, loaded lazily. */
 export function sheets(): { ninjas: HTMLImageElement[]; dog: HTMLImageElement } {
   const entries = Object.entries(files);
   const dog = entries.find(([path]) => path.endsWith('/dog.png'))?.[1] ?? '';
+  const bundled = entries.filter(([path]) => !path.endsWith('/dog.png')).map(([, url]) => url);
   return {
-    ninjas: entries.filter(([path]) => !path.endsWith('/dog.png')).map(([, url]) => image(url)),
+    ninjas: (custom.length ? custom : bundled).map(image),
     dog: image(dog),
   };
 }

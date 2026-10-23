@@ -9,6 +9,8 @@ import {widget} from '../models';
 
 export function ClaudeStatus():Promise<main.ClaudeUsageData>;
 
+export function CustomSprites():Promise<Array<string>>;
+
 export function DeleteWorkspace(arg1:string):Promise<void>;
 
 export function FileDiff(arg1:string):Promise<string>;
@@ -24,6 +26,8 @@ export function OpenShell(arg1:string,arg2:number,arg3:number):Promise<term.Info
 export function PickFolder():Promise<string>;
 
 export function ReadFile(arg1:string):Promise<files.Content>;
+
+export function RecommendWidgets(arg1:string,arg2:string):Promise<Array<main.Recommendation>>;
 
 export function RefreshWidget(arg1:string,arg2:number):Promise<main.WidgetResult>;
 

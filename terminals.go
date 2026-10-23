@@ -44,6 +44,9 @@ func defaultWidgets() []widget.Instance {
 	catalog := widget.Catalog()
 	out := make([]widget.Instance, 0, len(catalog))
 	for _, def := range catalog {
+		if def.Multiple {
+			continue // added on purpose, with a name, from 위젯 관리
+		}
 		inst, err := widget.NewInstance(def.ID)
 		if err == nil {
 			out = append(out, inst)

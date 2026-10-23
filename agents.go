@@ -26,11 +26,50 @@ type claudeBridge interface {
 
 // AgentEvent is a simplified hook event for the UI.
 type AgentEvent struct {
-	TermID  string `json:"termId"`
-	Event   string `json:"event"`
-	Tool    string `json:"tool,omitempty"`
-	File    string `json:"file,omitempty"`
-	Message string `json:"message,omitempty"`
+	TermID   string    `json:"termId"`
+	Event    string    `json:"event"`
+	Tool     string    `json:"tool,omitempty"`
+	File     string    `json:"file,omitempty"`
+	Message  string    `json:"message,omitempty"`
+	Progress *Progress `json:"progress,omitempty"`
+}
+
+// Progress is how far Claude is through its to-do list for the request.
+type Progress struct {
+	Done    int    `json:"done"`
+	Total   int    `json:"total"`
+	Current string `json:"current,omitempty"` // the in-progress item
+}
+
+// todoProgress reads Claude's TodoWrite list ({todos: [{status, activeForm}]}).
+func todoProgress(input map[string]any) *Progress {
+	items, ok := input["todos"].([]any)
+	if !ok || len(items) == 0 {
+		return nil
+	}
+	p := &Progress{}
+	for _, it := range items {
+		todo, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		p.Total++
+		switch todo["status"] {
+		case "completed":
+			p.Done++
+		case "in_progress":
+			if p.Current == "" {
+				p.Current, _ = todo["activeForm"].(string)
+				if p.Current == "" {
+					p.Current, _ = todo["content"].(string)
+				}
+			}
+		}
+	}
+	if p.Total == 0 {
+		return nil
+	}
+	return p
 }
 
 // FilesEvent lists files for the file tree.
@@ -155,9 +194,11 @@ func (a *App) onHook(key string, ev bridge.HookEvent) {
 	if !ok || s.termID == "" {
 		return
 	}
-	a.deps.Emit(a.ctx, eventAgent, AgentEvent{
-		TermID: s.termID, Event: ev.Event, Tool: ev.ToolName, File: ev.FilePath(), Message: ev.Message,
-	})
+	out := AgentEvent{TermID: s.termID, Event: ev.Event, Tool: ev.ToolName, File: ev.FilePath(), Message: ev.Message}
+	if ev.ToolName == "TodoWrite" {
+		out.Progress = todoProgress(ev.ToolInput)
+	}
+	a.deps.Emit(a.ctx, eventAgent, out)
 	if a.deps.Sessions != nil && (ev.Event == "UserPromptSubmit" || ev.Event == "Stop") {
 		_ = a.deps.Sessions.Touch(key, ev.Prompt, a.now())
 	}
