@@ -38,6 +38,12 @@ func (p *fakeProc) Resize(int, int) error       { return nil }
 func (p *fakeProc) Close() error                { p.once.Do(func() { close(p.closed) }); return nil }
 func (p *fakeProc) Wait() error                 { <-p.closed; return nil }
 
+type fakeBridge struct{}
+
+func (fakeBridge) ClaudeConfig(key string) ([]byte, []byte) {
+	return []byte(`{"mcpServers":{"k":"` + key + `"}}`), []byte(`{"hooks":{}}`)
+}
+
 type event struct {
 	name string
 	data any
@@ -86,6 +92,8 @@ func newHarness(t *testing.T) *harness {
 		NotesDir:     t.TempDir(),
 		NewSessionID: func() string { return "sess-1" },
 		PickFolder:   func(context.Context) (string, error) { return `C:\picked`, nil },
+		Bridge:       fakeBridge{},
+		RunDir:       t.TempDir(),
 	})
 	t.Cleanup(func() { h.app.shutdown(context.Background()) })
 	return h

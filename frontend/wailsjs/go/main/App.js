@@ -6,8 +6,16 @@ export function DeleteWorkspace(arg1) {
   return window['go']['main']['App']['DeleteWorkspace'](arg1);
 }
 
+export function FileDiff(arg1) {
+  return window['go']['main']['App']['FileDiff'](arg1);
+}
+
 export function Info() {
   return window['go']['main']['App']['Info']();
+}
+
+export function ListDir(arg1) {
+  return window['go']['main']['App']['ListDir'](arg1);
 }
 
 export function OpenClaude(arg1, arg2, arg3) {
@@ -20,6 +28,10 @@ export function OpenShell(arg1, arg2, arg3) {
 
 export function PickFolder() {
   return window['go']['main']['App']['PickFolder']();
+}
+
+export function ReadFile(arg1) {
+  return window['go']['main']['App']['ReadFile'](arg1);
 }
 
 export function SaveWorkspace(arg1) {

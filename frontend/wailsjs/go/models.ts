@@ -1,3 +1,46 @@
+export namespace files {
+	
+	export class Content {
+	    path: string;
+	    text: string;
+	    size: number;
+	    binary: boolean;
+	    truncated: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Content(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.text = source["text"];
+	        this.size = source["size"];
+	        this.binary = source["binary"];
+	        this.truncated = source["truncated"];
+	    }
+	}
+	export class Entry {
+	    name: string;
+	    path: string;
+	    dir: boolean;
+	    size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Entry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.dir = source["dir"];
+	        this.size = source["size"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
 	export class AppInfo {

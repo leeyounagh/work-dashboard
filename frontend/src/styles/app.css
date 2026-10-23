@@ -31,7 +31,7 @@ body {
   min-height: 0;
 }
 
-.panel > h2 {
+.panel h2 {
   margin: 0;
   padding: 8px 12px;
   font-size: 11px;
@@ -158,8 +158,49 @@ textarea.field { resize: vertical; }
 .term-tab-close:hover { color: var(--danger); }
 .term-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .term-body { position: relative; flex: 1; min-height: 0; background: var(--bg); }
-.term-pane { position: absolute; inset: 4px 0 0 8px; display: none; }
-.term-pane.active { display: block; }
+.tab-pane { position: absolute; inset: 0; display: none; }
+.tab-pane.active { display: block; }
+.term-pane { inset: 4px 0 0 8px; }
+.editor-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.hidden { display: none !important; }
+
+/* Side column: workspaces on top, files below */
+.side { display: flex; flex-direction: column; overflow: hidden; }
+.side-top { flex: 0 1 auto; max-height: 55%; overflow: auto; border-bottom: 1px solid var(--border); }
+.side-bottom { flex: 1 1 0; min-height: 0; overflow: auto; }
+
+/* File tree */
+.file-tree { padding: 4px 0 12px; }
+.tree-section { margin-bottom: 8px; }
+.tree-title { margin: 6px 12px 2px; font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.tree-file, .tree-dir-row {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  width: 100%;
+  padding: 2px 12px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tree-file:hover, .tree-dir-row:hover { background: var(--panel-raised); }
+.tree-root { font-weight: 600; }
+.tree-name { flex-shrink: 0; }
+.tree-dir { color: var(--text-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.badge { font-size: 10px; padding: 0 4px; border-radius: 3px; background: var(--panel-raised); color: var(--text-muted); }
+.badge-E, .badge-W { color: var(--warn); }
+.small { font-size: 11px; padding: 2px 12px; margin: 0; }
+
+/* File viewer */
+.file-pane { display: none; flex-direction: column; }
+.file-pane.active { display: flex; }
+.file-bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.file-path { flex: 1; color: var(--text-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.file-editor { flex: 1; min-height: 0; overflow: hidden; }
+.term-tab.kind-file::before { content: '◆'; color: var(--warn); font-size: 9px; }
 
 /* Toast */
 #toast {

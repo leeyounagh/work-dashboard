@@ -11,7 +11,11 @@ import {
 import { workspace as models } from '../wailsjs/go/models';
 import { groupBySource, orEmpty, type Definition, type ListResult, type Workspace } from './lib/widgets';
 import { addFolder, emptyDraft, isDirty, removeFolder } from './lib/workspaceDraft';
+import { EventsOn } from '../wailsjs/runtime/runtime';
+import { FileTree } from './files/tree';
+import { FileViewer } from './files/viewer';
 import { mountFloor } from './office/floor';
+import { TabHost } from './tabs/tabHost';
 import { TerminalPanel, type TerminalKind } from './terminal/panel';
 import { renderSidebar, type SidebarHandlers, type SidebarState } from './workspaces/sidebar';
 
@@ -65,6 +69,13 @@ function toast(message: string) {
   host.classList.add('show');
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => host.classList.remove('show'), 5000);
+}
+
+interface FilesEvent {
+  termId: string;
+  workspaceId: string;
+  paths: string[];
+  tool?: string;
 }
 
 /** What the terminal buttons act on: the saved workspace, and whether it has unsaved edits. */
@@ -197,12 +208,39 @@ async function start() {
   import.meta.hot?.dispose(() => stopFloor?.());
 
   let selection: Selection = { workspace: null, dirty: false };
-  const panel = new TerminalPanel(byId('term-tabs'), byId('term-body'), toast);
+  const editorBody = byId('editor-body');
+  const tabs = new TabHost(byId('editor-tabs'), editorBody, () => byId('editor-empty').classList.remove('hidden'));
+  const panel = new TerminalPanel(tabs, editorBody, toast);
   import.meta.hot?.dispose(() => panel.dispose());
+  const viewer = new FileViewer(tabs, toast);
+  const tree = new FileTree(byId('file-tree'), (path) => void viewer.open(path), toast);
+  new MutationObserver(() => byId('editor-empty').classList.toggle('hidden', tabs.activeId !== null)).observe(
+    byId('editor-tabs'),
+    { childList: true },
+  );
+
+  // Claude (via the dashboard MCP tool) asked to show files: list them and open tabs.
+  const offOpen = EventsOn('files:open', (ev: FilesEvent) => {
+    tree.opened(ev.workspaceId, ev.paths);
+    ev.paths.forEach((p, i) => void viewer.open(p, i === 0));
+  });
+  const offSeen = EventsOn('files:seen', (ev: FilesEvent) => {
+    for (const p of ev.paths) tree.seen(ev.workspaceId, p, ev.tool ?? '');
+  });
+  import.meta.hot?.dispose(() => {
+    offOpen();
+    offSeen();
+  });
+
   const updateButtons = wireTerminalButtons(panel, () => selection);
+  let shownId: string | null = null;
   const workspaces = createWorkspaceController((next) => {
     selection = next;
     updateButtons();
+    if ((next.workspace?.id ?? null) !== shownId) {
+      shownId = next.workspace?.id ?? null;
+      tree.show(next.workspace);
+    }
   });
 
   const catalogEl = byId('catalog');

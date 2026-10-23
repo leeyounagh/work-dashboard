@@ -5,17 +5,23 @@ import { FitAddon } from '@xterm/addon-fit';
 import { OpenClaude, OpenShell, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 import { base64ToBytes } from '../lib/workspaceDraft';
+import type { TabHost } from '../tabs/tabHost';
 import { EarlyEvents, type TermExit } from './earlyEvents';
 
 export type TerminalKind = 'claude' | 'shell';
 
-interface Session {
+export interface TerminalInfo {
   id: string;
+  title: string;
+  kind: TerminalKind;
+  workspaceId: string;
+  alive: boolean;
+}
+
+interface Session extends TerminalInfo {
   term: Terminal;
   fit: FitAddon;
-  tab: HTMLElement;
   pane: HTMLElement;
-  alive: boolean;
 }
 
 interface TermData {
@@ -40,12 +46,12 @@ export class TerminalPanel {
   private readonly early = new EarlyEvents();
   private readonly unsubscribe: Array<() => void>;
   private readonly resizeObserver: ResizeObserver;
-  private active: string | null = null;
   private opening = false;
+  private readonly listeners = new Set<(list: TerminalInfo[]) => void>();
 
   constructor(
-    private readonly tabs: HTMLElement,
-    private readonly body: HTMLElement,
+    private readonly tabs: TabHost,
+    body: HTMLElement,
     private readonly onError: (message: string) => void,
   ) {
     this.unsubscribe = [
@@ -56,14 +62,37 @@ export class TerminalPanel {
     this.resizeObserver.observe(body);
   }
 
+  /** Notified whenever terminals open, close or exit (used by the office floor). */
+  onChange(listener: (list: TerminalInfo[]) => void): void {
+    this.listeners.add(listener);
+  }
+
+  list(): TerminalInfo[] {
+    return [...this.sessions.values()].map(({ id, title, kind, workspaceId, alive }) => ({
+      id,
+      title,
+      kind,
+      workspaceId,
+      alive,
+    }));
+  }
+
+  private changed() {
+    const list = this.list();
+    for (const l of this.listeners) l(list);
+  }
+
   async open(kind: TerminalKind, workspaceId: string): Promise<void> {
     if (this.opening) return; // ignore double clicks while a process starts
     this.opening = true;
     const pane = document.createElement('div');
     pane.className = 'term-pane';
+    // The pane must be in the DOM and visible for xterm to measure its size.
+    pane.style.visibility = 'hidden';
+    pane.classList.add('tab-pane', 'active', 'measuring');
+    document.querySelector('#editor-body')?.append(pane);
     let term: Terminal | undefined;
     try {
-      this.body.append(pane);
       term = new Terminal({
         theme: THEME,
         fontFamily: "'Cascadia Mono', Consolas, monospace",
@@ -78,7 +107,10 @@ export class TerminalPanel {
 
       const openFn = kind === 'claude' ? OpenClaude : OpenShell;
       const info = await openFn(workspaceId, term.cols, term.rows);
-      this.register({ id: info.id, term, fit, tab: this.createTab(info.id, info.title, info.dir, kind), pane, alive: true });
+      pane.style.visibility = '';
+      pane.classList.remove('measuring');
+      const session: Session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane };
+      this.register(session, info.dir);
     } catch (err) {
       term?.dispose();
       pane.remove();
@@ -88,40 +120,27 @@ export class TerminalPanel {
     }
   }
 
-  private createTab(id: string, title: string, dir: string, kind: TerminalKind): HTMLElement {
-    const tab = document.createElement('div');
-    tab.className = `term-tab kind-${kind}`;
-    tab.setAttribute('role', 'tab');
-    tab.setAttribute('aria-selected', 'false');
-
-    const select = document.createElement('button');
-    select.type = 'button';
-    select.className = 'term-tab-label';
-    select.textContent = title;
-    select.title = dir;
-    select.addEventListener('click', () => this.activate(id));
-
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'term-tab-close';
-    close.textContent = '×';
-    close.setAttribute('aria-label', `${title} 탭 닫기`);
-    close.addEventListener('click', () => void this.close(id));
-
-    tab.append(select, close);
-    this.tabs.append(tab);
-    return tab;
-  }
-
-  private register(session: Session) {
+  private register(session: Session, dir: string) {
     this.sessions.set(session.id, session);
     session.term.onData((data) => {
       if (session.alive) TermWrite(session.id, data).catch((err) => this.onError(String(err)));
     });
+    this.tabs.add({
+      id: session.id,
+      title: session.title,
+      tooltip: dir,
+      kind: session.kind,
+      pane: session.pane,
+      onActivate: () => {
+        this.fit(session);
+        session.term.focus();
+      },
+      onClose: () => void this.close(session.id),
+    });
     const { chunks, exit } = this.early.take(session.id);
     for (const chunk of chunks) session.term.write(chunk);
     if (exit) this.markExited(session, exit);
-    this.activate(session.id);
+    this.changed();
   }
 
   private handleData(ev: TermData) {
@@ -139,26 +158,14 @@ export class TerminalPanel {
 
   private markExited(session: Session, ev: TermExit) {
     session.alive = false;
-    session.tab.classList.add('exited');
+    this.tabs.mark(session.id, 'exited');
     const reason = ev.error ? `: ${stripControl(ev.error)}` : '';
     session.term.write(`\r\n\x1b[90m[프로세스 종료${reason}]\x1b[0m\r\n`);
+    this.changed();
   }
 
-  private activate(id: string) {
-    this.active = id;
-    for (const s of this.sessions.values()) {
-      const on = s.id === id;
-      s.pane.classList.toggle('active', on);
-      s.tab.classList.toggle('active', on);
-      s.tab.setAttribute('aria-selected', String(on));
-    }
-    this.fitActive();
-    this.sessions.get(id)?.term.focus();
-  }
-
-  private fitActive() {
-    const s = this.active ? this.sessions.get(this.active) : undefined;
-    if (!s || s.pane.clientWidth === 0) return;
+  private fit(s: Session) {
+    if (s.pane.clientWidth === 0) return;
     const { cols, rows } = s.term;
     s.fit.fit();
     if (s.alive && (s.term.cols !== cols || s.term.rows !== rows)) {
@@ -166,6 +173,12 @@ export class TerminalPanel {
         // The process may have just exited; the exit event will update the tab.
       });
     }
+  }
+
+  private fitActive() {
+    const id = this.tabs.activeId;
+    const s = id ? this.sessions.get(id) : undefined;
+    if (s) this.fit(s);
   }
 
   async close(id: string): Promise<void> {
@@ -180,13 +193,8 @@ export class TerminalPanel {
       }
     }
     s.term.dispose();
-    s.pane.remove();
-    s.tab.remove();
-    if (this.active === id) {
-      const next = [...this.sessions.keys()].at(-1);
-      this.active = null;
-      if (next) this.activate(next);
-    }
+    this.tabs.remove(id);
+    this.changed();
   }
 
   /** Releases listeners and terminals (used by Vite HMR). Processes keep running. */

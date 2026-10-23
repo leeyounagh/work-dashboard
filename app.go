@@ -47,18 +47,23 @@ type Deps struct {
 	// methods to any web page over its websocket, so dev builds lock them
 	// unless WD_DEV_TERMINALS=1 is set.
 	TerminalsLocked bool
+	// Bridge connects Claude sessions back to the dashboard (nil disables it).
+	Bridge claudeBridge
+	// RunDir holds per-session bridge config files.
+	RunDir string
 }
 
 // App holds the methods bound to the frontend.
 type App struct {
-	ctx   context.Context
-	deps  Deps
-	terms *term.Manager
+	ctx    context.Context
+	deps   Deps
+	terms  *term.Manager
+	agents *agentRegistry
 }
 
 // NewApp wires the app with its dependencies.
 func NewApp(deps Deps) *App {
-	a := &App{ctx: context.Background(), deps: deps}
+	a := &App{ctx: context.Background(), deps: deps, agents: newAgentRegistry()}
 	a.terms = term.NewManager(deps.Start, a.emitData, a.emitExit)
 	return a
 }
@@ -89,6 +94,7 @@ func (a *App) emitData(id string, b []byte) {
 }
 
 func (a *App) emitExit(id string, err error) {
+	a.endAgentSession(id)
 	ev := TermExit{ID: id}
 	if err != nil {
 		ev.Error = err.Error()

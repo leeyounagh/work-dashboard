@@ -217,3 +217,46 @@ func TestResolveShim(t *testing.T) {
 		t.Fatal("a batch file without an exe line must not resolve")
 	}
 }
+
+func TestClaudeSpecBridgeFilesAndPrompt(t *testing.T) {
+	spec, err := ClaudeSpec(ws(t, t.TempDir()), ClaudeOptions{
+		Exe:           "claude",
+		SessionID:     "s1",
+		MCPConfigFile: `C:\run\s1.mcp.json`,
+		SettingsFile:  `C:\run\s1.settings.json`,
+		Prompt:        "/qa-2pass groupware 근태 1차",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"--session-id", "s1",
+		"--mcp-config", `C:\run\s1.mcp.json`,
+		"--settings", `C:\run\s1.settings.json`,
+		"--", "/qa-2pass groupware 근태 1차",
+	}
+	if !slices.Equal(spec.Args, want) {
+		t.Fatalf("Args = %q\nwant  %q", spec.Args, want)
+	}
+}
+
+func TestCleanEnvDropsParentSessionMarkers(t *testing.T) {
+	in := []string{
+		"PATH=C:\bin",
+		"CLAUDECODE=1",
+		"CLAUDE_CODE_SESSION_ID=abc",
+		"CLAUDE_CODE_MESSAGING_TOKEN=secret",
+		"CLAUDE_CODE_CHILD_SESSION=1",
+		"CLAUDE_PID=42",
+		"CLAUDE_CODE_MAX_OUTPUT_TOKENS=8000", // user configuration stays
+		"claudecode=1",                       // Windows env names are case-insensitive
+	}
+	got := CleanEnv(in)
+	want := []string{"PATH=C:\bin", "CLAUDE_CODE_MAX_OUTPUT_TOKENS=8000"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("CleanEnv = %q, want %q", got, want)
+	}
+	if len(in) != 8 {
+		t.Fatal("input must not be modified")
+	}
+}

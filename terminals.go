@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/leeyounagh/work-dashboard/internal/launch"
 	"github.com/leeyounagh/work-dashboard/internal/term"
@@ -62,15 +63,49 @@ func (a *App) OpenClaude(workspaceID string, cols, rows int) (term.Info, error) 
 	if err != nil {
 		return term.Info{}, err
 	}
-	spec, err := launch.ClaudeSpec(ws, launch.ClaudeOptions{
-		Exe:       exe,
-		SessionID: a.deps.NewSessionID(),
-		NotesFile: notes,
-	})
-	if err != nil {
-		return term.Info{}, err
+	return a.openClaude(ws.ID, launch.ClaudeOptions{Exe: exe, NotesFile: notes}, ws.Folders, ws.Name, cols, rows)
+}
+
+// openClaude starts a Claude session connected to the bridge.
+func (a *App) openClaude(workspaceID string, opts launch.ClaudeOptions, folders []string, name string, cols, rows int) (term.Info, error) {
+	if opts.SessionID == "" {
+		opts.SessionID = a.deps.NewSessionID()
 	}
-	return a.terms.Open(spec, cols, rows)
+	// The session ID doubles as the bridge key: hooks and MCP calls carry it in the URL.
+	key := opts.SessionID
+	mcpFile, settingsFile, err := a.writeBridgeFiles(key)
+	if err != nil {
+		return term.Info{}, fmt.Errorf("대시보드 연결 파일을 쓰지 못했습니다: %w", err)
+	}
+	opts.MCPConfigFile, opts.SettingsFile = mcpFile, settingsFile
+	a.agents.add(key, &agentSession{workspaceID: workspaceID, files: nonEmpty(mcpFile, settingsFile)})
+
+	ws := workspace.Workspace{ID: workspaceID, Name: name, Folders: folders}
+	spec, err := launch.ClaudeSpec(ws, opts)
+	if err == nil {
+		var info term.Info
+		info, err = a.terms.Open(spec, cols, rows)
+		if err == nil {
+			a.agents.bindTerm(key, info.ID)
+			return info, nil
+		}
+	}
+	if s, ok := a.agents.remove(key); ok {
+		for _, f := range s.files {
+			_ = os.Remove(f)
+		}
+	}
+	return term.Info{}, err
+}
+
+func nonEmpty(items ...string) []string {
+	var out []string
+	for _, it := range items {
+		if it != "" {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // OpenShell starts a plain shell in the workspace's first folder.

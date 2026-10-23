@@ -8,23 +8,31 @@
 </head>
 <body>
   <div id="app">
-    <section class="panel side" aria-label="워크스페이스">
-      <h2>Workspaces</h2>
-      <div id="ws-list"></div>
-      <div id="ws-editor"></div>
+    <section class="panel side" aria-label="워크스페이스와 파일">
+      <div class="side-top">
+        <h2>Workspaces</h2>
+        <div id="ws-list"></div>
+        <div id="ws-editor"></div>
+      </div>
+      <div class="side-bottom">
+        <h2>Files</h2>
+        <div id="file-tree" class="file-tree"></div>
+      </div>
     </section>
     <section class="panel floor" aria-label="사무실">
       <canvas id="floor"></canvas>
     </section>
-    <section class="panel terminal" aria-label="터미널">
+    <section class="panel terminal" aria-label="터미널과 파일">
       <header class="term-bar">
-        <div id="term-tabs" class="term-tabs"></div>
+        <div id="editor-tabs" class="term-tabs" role="tablist"></div>
         <div class="term-actions">
           <button type="button" class="ghost" data-open="claude">+ Claude</button>
           <button type="button" class="ghost" data-open="shell">+ 셸</button>
         </div>
       </header>
-      <div id="term-body" class="term-body"></div>
+      <div id="editor-body" class="term-body">
+        <p id="editor-empty" class="muted editor-empty">워크스페이스를 고르고 + Claude 나 + 셸 로 터미널을 열거나, 왼쪽에서 파일을 여세요.</p>
+      </div>
     </section>
     <section class="panel widgets" aria-label="위젯">
       <h2>Widgets</h2>

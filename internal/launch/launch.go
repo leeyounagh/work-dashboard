@@ -21,6 +21,10 @@ type ClaudeOptions struct {
 	SessionID string // new session UUID, or the session to resume
 	Resume    bool   // resume SessionID instead of starting it
 	NotesFile string // optional file appended to the system prompt
+
+	MCPConfigFile string // optional --mcp-config file (the dashboard bridge)
+	SettingsFile  string // optional --settings file (bridge hooks)
+	Prompt        string // optional first prompt, e.g. "/qa-2pass ..."
 }
 
 // ClaudeSpec runs claude in the first folder and adds the others with --add-dir.
@@ -42,7 +46,18 @@ func ClaudeSpec(ws workspace.Workspace, opts ClaudeOptions) (term.Spec, error) {
 	if opts.NotesFile != "" {
 		args = append(args, "--append-system-prompt-file", opts.NotesFile)
 	}
-	spec := term.Spec{Name: opts.Exe, Args: args, Dir: ws.Folders[0], Title: "Claude · " + ws.Name, Kind: "claude"}
+	if opts.MCPConfigFile != "" {
+		args = append(args, "--mcp-config", opts.MCPConfigFile)
+	}
+	if opts.SettingsFile != "" {
+		args = append(args, "--settings", opts.SettingsFile)
+	}
+	if opts.Prompt != "" {
+		// "--" ends the options: --mcp-config takes several values and would
+		// otherwise swallow the prompt, and a prompt starting with "-" stays text.
+		args = append(args, "--", opts.Prompt)
+	}
+	spec := term.Spec{Name: opts.Exe, Args: args, Dir: ws.Folders[0], Env: CleanEnv(os.Environ()), Title: "Claude · " + ws.Name, Kind: "claude"}
 	return wrapSpec(spec)
 }
 
@@ -58,7 +73,7 @@ func ShellSpec(ws workspace.Workspace, shell string) (term.Spec, error) {
 		}
 		dir = home
 	}
-	return term.Spec{Name: shell, Args: []string{"-NoLogo"}, Dir: dir, Title: "Shell · " + ws.Name, Kind: "shell"}, nil
+	return term.Spec{Name: shell, Args: []string{"-NoLogo"}, Dir: dir, Env: CleanEnv(os.Environ()), Title: "Shell · " + ws.Name, Kind: "shell"}, nil
 }
 
 // shimTarget matches the exe line of an npm-generated .cmd shim, e.g.
@@ -172,4 +187,34 @@ func RemoveNotes(dir, id string) error {
 		return fmt.Errorf("%s 메모를 지우지 못했습니다: %w", id, err)
 	}
 	return nil
+}
+
+// parentSessionVars mark a process as running inside a Claude Code session.
+// When the dashboard itself was started from Claude Code they would leak into
+// new sessions (disabling transcript saving, pointing at the wrong parent).
+var parentSessionVars = map[string]bool{
+	"CLAUDECODE":                   true,
+	"CLAUDE_PID":                   true,
+	"CLAUDE_EFFORT":                true,
+	"CLAUDE_CODE_CHILD_SESSION":    true,
+	"CLAUDE_CODE_ENTRYPOINT":       true,
+	"CLAUDE_CODE_EXECPATH":         true,
+	"CLAUDE_CODE_MESSAGING_SOCKET": true,
+	"CLAUDE_CODE_MESSAGING_TOKEN":  true,
+	"CLAUDE_CODE_SESSION_ATTENDED": true,
+	"CLAUDE_CODE_SESSION_ID":       true,
+	"CLAUDE_CODE_SSE_PORT":         true,
+}
+
+// CleanEnv returns environ without parent Claude Code session markers.
+func CleanEnv(environ []string) []string {
+	out := make([]string, 0, len(environ))
+	for _, kv := range environ {
+		name, _, _ := strings.Cut(kv, "=")
+		if parentSessionVars[strings.ToUpper(name)] {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
