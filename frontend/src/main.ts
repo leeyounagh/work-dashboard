@@ -42,6 +42,7 @@ import { BrowserOpenURL, EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { Office } from './office/office';
+import { guardZoomKeys } from './layout/zoomKeys';
 import { useCustomSheets } from './office/sprites';
 import { mountSplitters } from './layout/splitters';
 import { TabHost } from './tabs/tabHost';
@@ -441,6 +442,8 @@ async function start() {
       : undefined,
   }));
   import.meta.hot?.dispose(() => board.destroy());
+  const stopZoomGuard = guardZoomKeys(window);
+  import.meta.hot?.dispose(stopZoomGuard);
 
   const loadCatalog = async () => {
     try {

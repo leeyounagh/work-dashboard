@@ -58,7 +58,8 @@ var errBatch = errors.New("배치 파일(.cmd/.bat)은 실행하지 않습니다
 // ignores trailing dots and spaces and an alternate data stream suffix
 // (run.cmd., "run.cmd ", run.cmd::$DATA all start run.cmd).
 func isBatch(name string) bool {
-	base := filepath.Base(name)
+	// Both separators, so a Windows path is read the same on any OS.
+	base := name[strings.LastIndexAny(name, `/\`)+1:]
 	if i := strings.IndexByte(base, ':'); i >= 0 {
 		base = base[:i]
 	}

@@ -75,6 +75,9 @@ func TestCappedOutput(t *testing.T) {
 func TestRunRefusesRelativeBatchFiles(t *testing.T) {
 	// exec resolves scripts\run against the working folder at start, where
 	// scripts\run.cmd would be picked up through PATHEXT.
+	if runtime.GOOS != "windows" {
+		t.Skip("PATHEXT lookup is Windows only")
+	}
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "scripts"), 0o700); err != nil {
 		t.Fatal(err)

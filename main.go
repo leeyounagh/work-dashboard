@@ -123,9 +123,10 @@ func main() {
 		MinHeight:        600,
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: windowBackground,
-		Windows:          &windows.Options{Theme: windows.Dark},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
+		// Ctrl + / Ctrl - / Ctrl 0 and Ctrl+wheel zoom the whole UI (WebView2's own zoom).
+		Windows:    &windows.Options{Theme: windows.Dark, IsZoomControlEnabled: true, ZoomFactor: 1.0},
+		OnStartup:  app.startup,
+		OnShutdown: app.shutdown,
 		SingleInstanceLock: &options.SingleInstanceLock{
 			// Dev builds use their own id so `wails dev` never blocks the installed app.
 			UniqueId: instanceID(),
