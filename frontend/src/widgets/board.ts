@@ -25,6 +25,9 @@ interface Result {
   error?: string;
 }
 
+/** Saves a workspace's widget list; resolves false when saving failed. */
+export type SaveWidgets = (workspaceId: string, update: (prev: Instance[]) => Instance[]) => Promise<boolean>;
+
 const open = (url: string) => BrowserOpenURL(url);
 
 export function renderData(type: string, data: unknown): HTMLElement {
@@ -45,32 +48,62 @@ export function renderData(type: string, data: unknown): HTMLElement {
   }
 }
 
+/** Adds or updates the instance of a widget type (one instance per type). */
+export function upsertWidget(prev: Instance[], type: string, change: (inst: Instance) => Instance): Instance[] {
+  const i = prev.findIndex((w) => w.type === type);
+  if (i < 0) return [...prev, change({ type, enabled: false, settings: {} })];
+  return prev.map((w, j) => (j === i ? change(w) : w));
+}
+
+/** Key for "already alerted": one per limit window, or per hour when the reset time is unknown. */
+export function alertKey(windowKey: string, resetsAt: string, now = Date.now()): string {
+  const t = Date.parse(resetsAt);
+  if (!Number.isFinite(t) || t <= 0 || resetsAt.startsWith('0001')) return `${windowKey}@hour-${Math.floor(now / 3_600_000)}`;
+  return `${windowKey}@${resetsAt}`;
+}
+
+type CatalogState = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; message: string; retry: () => void };
+
 /** The right-hand column: the selected workspace's widgets. */
 export class WidgetBoard {
   private workspace: Workspace | null = null;
   private catalog: Definition[] = [];
+  private catalogState: CatalogState = { kind: 'loading' };
   private managing = false;
   private timer = 0;
-  private generation = 0; // bumps when the workspace changes; drops stale responses
+  private generation = 0; // bumps on every render; drops stale responses
+  private loaders: Array<() => Promise<void>> = [];
   private readonly alerted = new Set<string>();
 
   constructor(
     private readonly host: HTMLElement,
-    private readonly saveWidgets: (widgets: Instance[]) => Promise<void>,
+    private readonly saveWidgets: SaveWidgets,
     private readonly toast: (message: string) => void,
   ) {}
 
   setCatalog(catalog: Definition[]): void {
     this.catalog = catalog;
+    this.catalogState = { kind: 'ready' };
+    this.render();
+  }
+
+  setCatalogError(message: string, retry: () => void): void {
+    this.catalogState = { kind: 'error', message, retry };
     this.render();
   }
 
   show(ws: Workspace | null): void {
-    const sameWidgets = JSON.stringify(ws?.widgets) === JSON.stringify(this.workspace?.widgets);
     const sameId = ws?.id === this.workspace?.id;
+    const sameWidgets = JSON.stringify(ws?.widgets) === JSON.stringify(this.workspace?.widgets);
     this.workspace = ws;
     if (sameId && sameWidgets) return;
+    if (!sameId) this.managing = false;
     this.render();
+  }
+
+  destroy(): void {
+    window.clearInterval(this.timer);
+    this.generation++;
   }
 
   private def(type: string): Definition | undefined {
@@ -79,11 +112,12 @@ export class WidgetBoard {
 
   private render() {
     this.generation++;
+    this.loaders = [];
     window.clearInterval(this.timer);
     const ws = this.workspace;
     const head = h('div', 'w-head');
     head.append(h('h2', '', 'Widgets'));
-    if (ws?.id) {
+    if (ws?.id && this.catalogState.kind === 'ready') {
       const manage = h('button', 'ghost small-btn', this.managing ? '완료' : '위젯 관리');
       manage.addEventListener('click', () => {
         this.managing = !this.managing;
@@ -91,25 +125,38 @@ export class WidgetBoard {
       });
       head.append(manage);
     }
+
+    const cs = this.catalogState;
+    if (cs.kind === 'loading') {
+      this.host.replaceChildren(head, h('p', 'muted', '위젯을 불러오는 중…'));
+      return;
+    }
+    if (cs.kind === 'error') {
+      const retry = h('button', 'ghost', '다시 시도');
+      retry.addEventListener('click', () => cs.retry());
+      const box = h('div', 'w-card');
+      box.append(h('p', 'error small', `위젯 목록을 불러오지 못했습니다: ${cs.message}`), retry);
+      this.host.replaceChildren(head, box);
+      return;
+    }
+
     if (!ws?.id) {
       this.host.replaceChildren(head, this.globalClaudeCard());
-      return;
-    }
-    if (this.managing) {
+    } else if (this.managing) {
       this.host.replaceChildren(head, this.manager(ws));
       return;
+    } else {
+      const cards = ws.widgets.map((inst, index) => ({ inst, index })).filter(({ inst }) => inst.enabled);
+      const nodes = cards.map(({ inst, index }) =>
+        this.def(inst.type) ? this.card(ws, inst, index) : h('p', 'muted small', `알 수 없는 위젯: ${inst.type}`),
+      );
+      if (!nodes.length) nodes.push(h('p', 'muted', '켜진 위젯이 없습니다. 「위젯 관리」에서 켜세요.'));
+      this.host.replaceChildren(head, ...nodes);
     }
-    const cards = ws.widgets
-      .map((inst, index) => ({ inst, index }))
-      .filter(({ inst }) => inst.enabled && this.def(inst.type))
-      .map(({ inst, index }) => this.card(ws, inst, index));
-    if (!cards.length) cards.push(h('p', 'muted', '켜진 위젯이 없습니다. 「위젯 관리」에서 켜세요.'));
-    this.host.replaceChildren(head, ...cards);
-    this.timer = window.setInterval(() => this.reloadAll(), AUTO_REFRESH_MS);
-  }
-
-  private reloadAll() {
-    this.host.querySelectorAll<HTMLButtonElement>('.w-card [data-reload]').forEach((b) => b.click());
+    this.timer = window.setInterval(() => {
+      if (document.hidden) return; // no polling while the window is hidden
+      for (const load of this.loaders) void load();
+    }, AUTO_REFRESH_MS);
   }
 
   private globalClaudeCard(): HTMLElement {
@@ -117,11 +164,18 @@ export class WidgetBoard {
     const body = h('div', 'w-body', '불러오는 중…');
     card.append(h('h3', 'w-title', 'Claude 한도·로그인'), body);
     const gen = this.generation;
-    ClaudeStatus()
-      .then((d) => {
-        if (gen === this.generation) body.replaceChildren(renderClaudeUsage(d as unknown as ClaudeUsageData));
-      })
-      .catch((err) => body.replaceChildren(h('p', 'error small', String(err))));
+    const load = async () => {
+      try {
+        const d = (await ClaudeStatus()) as unknown as ClaudeUsageData;
+        if (gen !== this.generation) return;
+        body.replaceChildren(renderClaudeUsage(d));
+        this.maybeAlert({ type: 'claude-usage', data: d });
+      } catch (err) {
+        if (gen === this.generation) body.replaceChildren(h('p', 'error small', String(err)));
+      }
+    };
+    this.loaders.push(load);
+    void load();
     return card;
   }
 
@@ -129,39 +183,42 @@ export class WidgetBoard {
     const def = this.def(inst.type)!;
     const card = h('section', 'w-card');
     const title = h('div', 'w-card-head');
+    const when = h('span', 'w-when muted', '');
     const reload = h('button', 'icon', '↻');
     reload.title = '새로고침';
-    reload.dataset.reload = '1';
     const gear = h('button', 'icon', '⚙');
     gear.title = '설정';
-    title.append(h('h3', 'w-title', def.name), h('span', 'w-when muted', ''), reload, gear);
+    title.append(h('h3', 'w-title', def.name), when, reload, gear);
     const body = h('div', 'w-body', '불러오는 중…');
     const settings = h('div', 'w-settings hidden');
     card.append(title, settings, body);
 
     const gen = this.generation;
+    let busy = false;
     const load = async (fresh: boolean) => {
+      if (busy) return; // a slow load is still running
+      busy = true;
       reload.disabled = true;
       try {
         const res = (await (fresh ? RefreshWidget : WidgetData)(ws.id, index)) as Result;
         if (gen !== this.generation) return;
         if (res.error) body.replaceChildren(h('p', 'error small', res.error));
         else body.replaceChildren(renderData(res.type, res.data));
-        (title.querySelector('.w-when') as HTMLElement).textContent = new Date().toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
+        when.textContent = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
         this.maybeAlert(res);
       } catch (err) {
         if (gen === this.generation) body.replaceChildren(h('p', 'error small', String(err)));
       } finally {
+        busy = false;
         reload.disabled = false;
       }
     };
+    // Auto refresh reuses the backend cache; the button asks for fresh data.
+    this.loaders.push(() => load(false));
     reload.addEventListener('click', () => void load(true));
     gear.addEventListener('click', () => {
       settings.classList.toggle('hidden');
-      if (!settings.classList.contains('hidden')) settings.replaceChildren(this.settingsForm(ws, inst, index));
+      if (!settings.classList.contains('hidden')) settings.replaceChildren(this.settingsForm(ws, inst));
     });
     void load(false);
     return card;
@@ -172,7 +229,7 @@ export class WidgetBoard {
     if (res.type !== 'claude-usage' || !res.data) return;
     const d = res.data as ClaudeUsageData;
     for (const w of d.usage.windows ?? []) {
-      const key = `${w.key}@${w.resetsAt}`;
+      const key = alertKey(w.key, w.resetsAt);
       if (w.percent >= d.alertPercent && !this.alerted.has(key)) {
         this.alerted.add(key);
         this.toast(`Claude ${w.label} 한도 ${Math.round(w.percent)}% 사용 — 리셋 전까지 아껴 쓰세요`);
@@ -180,13 +237,13 @@ export class WidgetBoard {
     }
   }
 
-  private settingsForm(ws: Workspace, inst: Instance, index: number): HTMLElement {
+  private settingsForm(ws: Workspace, inst: Instance): HTMLElement {
     const def = this.def(inst.type)!;
     const form = h('form', 'w-form');
     const inputs = new Map<string, HTMLInputElement | HTMLSelectElement>();
     for (const spec of def.settings) {
-      const current = inst.settings?.[spec.key] ?? spec.default;
-      const id = `ws-${index}-${spec.key}`;
+      const current = inst.settings && spec.key in inst.settings ? inst.settings[spec.key] : spec.default;
+      const id = `w-${inst.type}-${spec.key}`;
       const label = h('label', 'label', spec.label);
       label.htmlFor = id;
       let input: HTMLInputElement | HTMLSelectElement;
@@ -216,6 +273,7 @@ export class WidgetBoard {
     form.append(save);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (save.disabled) return;
       const next: Record<string, unknown> = {};
       for (const spec of def.settings) {
         const input = inputs.get(spec.key)!;
@@ -227,8 +285,10 @@ export class WidgetBoard {
         }
         next[spec.key] = parsed.value;
       }
-      const widgets = ws.widgets.map((w, i) => (i === index ? { ...w, settings: next } : w));
-      void this.saveWidgets(widgets);
+      save.disabled = true;
+      void this.saveWidgets(ws.id, (prev) => upsertWidget(prev, inst.type, (w) => ({ ...w, settings: next }))).finally(
+        () => (save.disabled = false),
+      );
     });
     return form;
   }
@@ -236,19 +296,22 @@ export class WidgetBoard {
   private manager(ws: Workspace): HTMLElement {
     const list = h('div', 'w-manager');
     list.append(h('p', 'muted small', '이 워크스페이스에서 볼 위젯을 고르세요.'));
+    const boxes: HTMLInputElement[] = [];
     for (const def of this.catalog) {
-      const index = ws.widgets.findIndex((w) => w.type === def.id);
+      const inst = ws.widgets.find((w) => w.type === def.id);
       const row = h('label', 'w-manage-row');
       const box = h('input');
       box.type = 'checkbox';
-      box.checked = index >= 0 && ws.widgets[index].enabled;
-      box.addEventListener('change', () => {
-        const widgets =
-          index >= 0
-            ? ws.widgets.map((w, i) => (i === index ? { ...w, enabled: box.checked } : w))
-            : [...ws.widgets, { type: def.id, enabled: box.checked, settings: {} }];
-        void this.saveWidgets(widgets);
+      box.checked = Boolean(inst?.enabled);
+      box.addEventListener('change', async () => {
+        const enabled = box.checked;
+        for (const b of boxes) b.disabled = true; // one save at a time
+        const ok = await this.saveWidgets(ws.id, (prev) => upsertWidget(prev, def.id, (w) => ({ ...w, enabled })));
+        // On failure re-render from the real state; on success show() re-renders.
+        if (!ok) this.render();
+        else for (const b of boxes) b.disabled = false;
       });
+      boxes.push(box);
       const text = h('span', '');
       text.append(h('strong', '', def.name), h('span', 'muted small-inline', ` ${def.description}`));
       row.append(box, text);

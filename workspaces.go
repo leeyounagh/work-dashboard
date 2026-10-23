@@ -13,11 +13,17 @@ import (
 
 // Workspaces returns the saved workspaces and any files that failed to load.
 func (a *App) Workspaces() workspace.ListResult {
+	if err := a.unlocked(); err != nil {
+		return workspace.ListResult{Workspaces: []workspace.Workspace{}, Problems: []string{err.Error()}}
+	}
 	return a.deps.Workspaces.List()
 }
 
 // SaveWorkspace creates (empty ID) or updates a workspace and returns it.
 func (a *App) SaveWorkspace(ws workspace.Workspace) (workspace.Workspace, error) {
+	if err := a.unlocked(); err != nil {
+		return workspace.Workspace{}, err
+	}
 	ws.Name = strings.TrimSpace(ws.Name)
 	folders := make([]string, len(ws.Folders))
 	for i, f := range ws.Folders {
@@ -66,6 +72,9 @@ func (a *App) createWorkspace(ws workspace.Workspace) (workspace.Workspace, erro
 
 // DeleteWorkspace removes a workspace.
 func (a *App) DeleteWorkspace(id string) error {
+	if err := a.unlocked(); err != nil {
+		return err
+	}
 	if err := a.deps.Workspaces.Delete(id); err != nil {
 		return fmt.Errorf("워크스페이스를 삭제하지 못했습니다: %w", err)
 	}

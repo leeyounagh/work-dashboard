@@ -34,7 +34,12 @@ type Client struct {
 	mu       sync.Mutex
 	cached   Usage
 	cachedAt time.Time
+	lastErr  error
+	errAt    time.Time
 }
+
+// errorCacheFor keeps a failing or rate-limited endpoint from being hit on every call.
+const errorCacheFor = 30 * time.Second
 
 // New creates a client.
 func New(opt Options) *Client {
@@ -52,7 +57,11 @@ func New(opt Options) *Client {
 		opt.CacheFor = time.Minute
 	}
 	if opt.HTTPClient == nil {
-		opt.HTTPClient = &http.Client{Timeout: 15 * time.Second}
+		opt.HTTPClient = &http.Client{
+			Timeout: 15 * time.Second,
+			// Never follow redirects: the request carries the OAuth token.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
 	}
 	return &Client{opt: opt}
 }
@@ -168,10 +177,15 @@ func (c *Client) Usage(ctx context.Context) (Usage, error) {
 	if !c.cachedAt.IsZero() && time.Since(c.cachedAt) < c.opt.CacheFor {
 		return c.cached, nil
 	}
+	if c.lastErr != nil && time.Since(c.errAt) < errorCacheFor {
+		return Usage{}, c.lastErr
+	}
 	u, err := c.fetchUsage(ctx)
 	if err != nil {
+		c.lastErr, c.errAt = err, time.Now()
 		return Usage{}, err
 	}
+	c.lastErr = nil
 	c.cached, c.cachedAt = u, time.Now()
 	return u, nil
 }

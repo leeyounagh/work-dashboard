@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/leeyounagh/work-dashboard/internal/claudeacct"
 	"github.com/leeyounagh/work-dashboard/internal/github"
 	"github.com/leeyounagh/work-dashboard/internal/widget"
@@ -46,6 +48,7 @@ type prCacheEntry struct {
 type prCache struct {
 	mu      sync.Mutex
 	entries map[string]prCacheEntry
+	flight  singleflight.Group // one gh run per query at a time
 }
 
 func (a *App) now() time.Time {
@@ -66,12 +69,24 @@ func (a *App) searchPRs(ctx context.Context, query string, fresh bool) ([]github
 	if ok && !fresh && time.Since(e.at) < prCacheFor {
 		return e.prs, nil
 	}
-	prs, err := github.Search(ctx, a.deps.GitHub, query)
+	started := time.Now()
+	v, err, _ := a.prs.flight.Do(query, func() (any, error) {
+		return github.Search(ctx, a.deps.GitHub, query)
+	})
 	if err != nil {
 		return nil, err
 	}
+	prs := v.([]github.PR)
 	a.prs.mu.Lock()
-	a.prs.entries[query] = prCacheEntry{prs: prs, at: time.Now()}
+	// Keep a newer result that finished while this one ran; drop expired entries.
+	if cur, ok := a.prs.entries[query]; !ok || cur.at.Before(started) {
+		a.prs.entries[query] = prCacheEntry{prs: prs, at: started}
+	}
+	for q, e := range a.prs.entries {
+		if time.Since(e.at) > prCacheFor {
+			delete(a.prs.entries, q)
+		}
+	}
 	a.prs.mu.Unlock()
 	return prs, nil
 }
@@ -110,7 +125,12 @@ func (a *App) prsFor(ctx context.Context, scope string, repos []string, fresh bo
 
 // ClaudeStatus returns the account and usage regardless of workspace.
 func (a *App) ClaudeStatus() ClaudeUsageData {
-	return a.claudeData(context.Background(), 90)
+	if err := a.unlocked(); err != nil {
+		return ClaudeUsageData{AlertPercent: 90, UsageError: err.Error()}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	return a.claudeData(ctx, 90)
 }
 
 func (a *App) claudeData(ctx context.Context, alertPercent int) ClaudeUsageData {
@@ -155,6 +175,10 @@ func (a *App) RefreshWidget(workspaceID string, index int) WidgetResult {
 
 func (a *App) widgetData(workspaceID string, index int, fresh bool) WidgetResult {
 	res := WidgetResult{FetchedAt: a.now()}
+	if err := a.unlocked(); err != nil {
+		res.Error = err.Error()
+		return res
+	}
 	ws, err := a.loadWorkspace(workspaceID)
 	if err != nil {
 		res.Error = err.Error()

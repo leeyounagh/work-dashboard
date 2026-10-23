@@ -11,11 +11,12 @@ import (
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
-var errTerminalsLocked = errors.New("개발 모드(wails dev)에서는 보안을 위해 터미널이 잠겨 있습니다. 열려면 WD_DEV_TERMINALS=1 로 실행하세요")
+var errDevLocked = errors.New("개발 모드(wails dev)에서는 보안을 위해 잠겨 있습니다. 열려면 WD_DEV_UNLOCK=1 로 실행하세요")
 
-func (a *App) checkTerminals() error {
-	if a.deps.TerminalsLocked {
-		return errTerminalsLocked
+// unlocked guards bindings that run commands or return local data.
+func (a *App) unlocked() error {
+	if a.deps.DevLocked {
+		return errDevLocked
 	}
 	return nil
 }
@@ -48,7 +49,7 @@ func defaultWidgets() []widget.Instance {
 
 // OpenClaude starts Claude Code with every folder of the workspace.
 func (a *App) OpenClaude(workspaceID string, cols, rows int) (term.Info, error) {
-	if err := a.checkTerminals(); err != nil {
+	if err := a.unlocked(); err != nil {
 		return term.Info{}, err
 	}
 	ws, err := a.loadWorkspace(workspaceID)
@@ -122,7 +123,7 @@ func nonEmpty(items ...string) []string {
 
 // OpenShell starts a plain shell in the workspace's first folder.
 func (a *App) OpenShell(workspaceID string, cols, rows int) (term.Info, error) {
-	if err := a.checkTerminals(); err != nil {
+	if err := a.unlocked(); err != nil {
 		return term.Info{}, err
 	}
 	ws, err := a.loadWorkspace(workspaceID)
@@ -138,17 +139,32 @@ func (a *App) OpenShell(workspaceID string, cols, rows int) (term.Info, error) {
 
 // TermWrite sends keyboard input to a terminal.
 func (a *App) TermWrite(id, data string) error {
-	if err := a.checkTerminals(); err != nil {
+	if err := a.unlocked(); err != nil {
 		return err
 	}
 	return a.terms.Write(id, data)
 }
 
 // TermResize resizes a terminal.
-func (a *App) TermResize(id string, cols, rows int) error { return a.terms.Resize(id, cols, rows) }
+func (a *App) TermResize(id string, cols, rows int) error {
+	if err := a.unlocked(); err != nil {
+		return err
+	}
+	return a.terms.Resize(id, cols, rows)
+}
 
 // TermClose terminates a terminal.
-func (a *App) TermClose(id string) error { return a.terms.Close(id) }
+func (a *App) TermClose(id string) error {
+	if err := a.unlocked(); err != nil {
+		return err
+	}
+	return a.terms.Close(id)
+}
 
 // Terminals lists running terminals.
-func (a *App) Terminals() []term.Info { return a.terms.List() }
+func (a *App) Terminals() []term.Info {
+	if a.unlocked() != nil {
+		return []term.Info{}
+	}
+	return a.terms.List()
+}

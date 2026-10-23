@@ -16,6 +16,7 @@ interface PRRef {
 interface Reviewer {
   login: string;
   state: string;
+  rerequested?: boolean;
 }
 
 export interface PRReviewsData {
@@ -97,6 +98,7 @@ const REVIEW_STATE: Record<string, { label: string; cls: string }> = {
   APPROVED: { label: '승인', cls: 'ok' },
   CHANGES_REQUESTED: { label: '변경 요청', cls: 'danger' },
   COMMENTED: { label: '코멘트', cls: 'muted' },
+  DISMISSED: { label: '철회됨', cls: 'muted' },
   PENDING: { label: '대기', cls: 'warn' },
 };
 
@@ -130,7 +132,8 @@ export function renderPRReviews(d: PRReviewsData, open: OpenURL): HTMLElement {
     for (const hl of pr.highlights) meta.append(h('span', `w-chip ${hl === 'changes-requested' ? 'danger' : 'warn'}`, HIGHLIGHT_LABEL[hl] ?? hl));
     for (const r of pr.reviewers ?? []) {
       const st = REVIEW_STATE[r.state] ?? { label: r.state, cls: 'muted' };
-      meta.append(h('span', `w-reviewer ${st.cls}`, `${r.login} · ${st.label}`));
+      const again = r.rerequested ? ' → 재요청' : '';
+      meta.append(h('span', `w-reviewer ${r.rerequested ? 'warn' : st.cls}`, `${r.login} · ${st.label}${again}`));
     }
     if (pr.checks === 'FAILURE' || pr.checks === 'ERROR') meta.append(h('span', 'w-chip danger', 'CI 실패'));
     item.append(meta);

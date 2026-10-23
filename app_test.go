@@ -308,14 +308,41 @@ func TestSaveWorkspaceCleansFolders(t *testing.T) {
 	}
 }
 
-func TestTerminalsLockedInDevMode(t *testing.T) {
+func TestEverythingLockedInDevMode(t *testing.T) {
 	h := newHarness(t)
 	saved, err := h.app.SaveWorkspace(workspace.Workspace{Name: "dev", Folders: []string{t.TempDir()}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.app.deps.TerminalsLocked = true
-	if _, err := h.app.OpenShell(saved.ID, 80, 24); err == nil || !strings.Contains(err.Error(), "WD_DEV_TERMINALS") {
+	h.app.deps.DevLocked = true
+	if res := h.app.Workspaces(); len(res.Workspaces) != 0 || len(res.Problems) != 1 {
+		t.Fatalf("Workspaces must be locked: %+v", res)
+	}
+	if _, err := h.app.SaveWorkspace(saved); err == nil {
+		t.Fatal("SaveWorkspace must be locked")
+	}
+	if err := h.app.DeleteWorkspace(saved.ID); err == nil {
+		t.Fatal("DeleteWorkspace must be locked")
+	}
+	if _, err := h.app.ListDir(saved.Folders[0]); err == nil {
+		t.Fatal("ListDir must be locked")
+	}
+	if _, err := h.app.ReadFile(saved.Folders[0]); err == nil {
+		t.Fatal("ReadFile must be locked")
+	}
+	if _, err := h.app.FileDiff(saved.Folders[0]); err == nil {
+		t.Fatal("FileDiff must be locked")
+	}
+	if r := h.app.WidgetData(saved.ID, 0); r.Error == "" || r.Data != nil {
+		t.Fatal("WidgetData must be locked")
+	}
+	if r := h.app.ClaudeStatus(); r.Login.LoggedIn || r.UsageError == "" {
+		t.Fatal("ClaudeStatus must be locked")
+	}
+	if len(h.app.Terminals()) != 0 || h.app.TermClose("t1") == nil || h.app.TermResize("t1", 80, 24) == nil {
+		t.Fatal("terminal bindings must be locked")
+	}
+	if _, err := h.app.OpenShell(saved.ID, 80, 24); err == nil || !strings.Contains(err.Error(), "WD_DEV_UNLOCK") {
 		t.Fatalf("OpenShell err = %v, want lock message", err)
 	}
 	if _, err := h.app.OpenClaude(saved.ID, 80, 24); err == nil {

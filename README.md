@@ -27,7 +27,7 @@ folder with `--add-dir` for the others, a fresh `--session-id`, and the notes pa
 
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
-wails dev                         # live reload (terminals are locked, see below)
+WD_DEV_UNLOCK=1 wails dev         # live reload (local data is locked without it, see below)
 wails build -clean -ldflags "-s -w"   # build/bin/work-dashboard.exe
 
 go test -cover ./...
@@ -35,9 +35,9 @@ cd frontend && npm test
 ```
 
 > **Security note for `wails dev`:** the Wails dev server accepts websocket calls from any
-> origin, so any web page open in a browser could call the bound methods. Terminal methods are
-> therefore disabled in dev builds unless you start with `WD_DEV_TERMINALS=1`; don't browse
-> untrusted sites while doing so. Release builds are not affected.
+> origin, so any web page open in a browser could call the bound methods. Every method that runs
+> commands or returns local data is therefore disabled in dev builds unless you start with
+> `WD_DEV_UNLOCK=1`; don't browse untrusted sites while doing so. Release builds are not affected.
 
 ## Local data
 

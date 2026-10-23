@@ -161,3 +161,37 @@ func TestUsageErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestUsageDoesNotFollowRedirects(t *testing.T) {
+	cred, cfg := writeFiles(t, time.Now().Add(time.Hour))
+	var leaked atomic.Bool
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			leaked.Store(true)
+		}
+	}))
+	t.Cleanup(target.Close)
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/x", http.StatusFound)
+	}))
+	t.Cleanup(redirect.Close)
+	_, err := New(Options{CredentialsPath: cred, ConfigPath: cfg, BaseURL: redirect.URL}).Usage(context.Background())
+	if err == nil || leaked.Load() {
+		t.Fatalf("err = %v, leaked = %v", err, leaked.Load())
+	}
+}
+
+func TestUsageCachesErrorsBriefly(t *testing.T) {
+	cred, cfg := writeFiles(t, time.Now().Add(time.Hour))
+	var hits atomic.Int32
+	srv := usageServer(t, 500, `{}`, &hits)
+	c := New(Options{CredentialsPath: cred, ConfigPath: cfg, BaseURL: srv.URL})
+	for range 3 {
+		if _, err := c.Usage(context.Background()); err == nil {
+			t.Fatal("expected error")
+		}
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("hits = %d, want 1 (error cached)", hits.Load())
+	}
+}

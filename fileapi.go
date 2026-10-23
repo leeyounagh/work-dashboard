@@ -20,6 +20,9 @@ func (a *App) guard() files.Guard {
 
 // ListDir lists a folder inside a workspace.
 func (a *App) ListDir(path string) ([]files.Entry, error) {
+	if err := a.unlocked(); err != nil {
+		return nil, err
+	}
 	entries, err := files.ListDir(a.guard(), path)
 	if err != nil {
 		return nil, fmt.Errorf("폴더를 열지 못했습니다: %w", err)
@@ -29,6 +32,9 @@ func (a *App) ListDir(path string) ([]files.Entry, error) {
 
 // ReadFile returns a file for the viewer.
 func (a *App) ReadFile(path string) (files.Content, error) {
+	if err := a.unlocked(); err != nil {
+		return files.Content{}, err
+	}
 	c, err := files.ReadFile(a.guard(), path, maxViewBytes)
 	if err != nil {
 		return files.Content{}, fmt.Errorf("파일을 열지 못했습니다: %w", err)
@@ -38,6 +44,9 @@ func (a *App) ReadFile(path string) (files.Content, error) {
 
 // FileDiff returns uncommitted changes of a file.
 func (a *App) FileDiff(path string) (string, error) {
+	if err := a.unlocked(); err != nil {
+		return "", err
+	}
 	d, err := files.Diff(a.guard(), path)
 	if err != nil {
 		return "", fmt.Errorf("변경 내용을 가져오지 못했습니다: %w", err)

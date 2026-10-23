@@ -146,3 +146,33 @@ func TestSettingsHelpers(t *testing.T) {
 		t.Error("String")
 	}
 }
+
+func TestReviewersDismissedAndRerequested(t *testing.T) {
+	pr := github.PR{Author: "me", Requested: []string{"bob"}, Reviews: []github.Review{
+		{Author: "alice", State: "APPROVED", SubmittedAt: t0.Add(-3 * time.Hour)},
+		{Author: "alice", State: "DISMISSED", SubmittedAt: t0.Add(-2 * time.Hour)}, // dismissed on push
+		{Author: "bob", State: "APPROVED", SubmittedAt: t0.Add(-5 * time.Hour)},    // then re-requested
+		{Author: "carol", State: "COMMENTED", SubmittedAt: t0.Add(-1 * time.Hour)},
+		{Author: "carol", State: "APPROVED", SubmittedAt: t0.Add(-4 * time.Hour)}, // out of order input
+	}}
+	got := map[string]ReviewerStatus{}
+	for _, r := range Reviewers(pr) {
+		got[r.Login] = r
+	}
+	if got["alice"].State != "DISMISSED" {
+		t.Errorf("a dismissed review must not bring back the old approval: %+v", got["alice"])
+	}
+	if got["bob"].State != "APPROVED" || !got["bob"].Rerequested {
+		t.Errorf("re-requested reviewer = %+v", got["bob"])
+	}
+	if got["carol"].State != "APPROVED" {
+		t.Errorf("reviews must be ordered by time: %+v", got["carol"])
+	}
+}
+
+func TestNeedsApprovalWhenNoReviewHighlightIsOff(t *testing.T) {
+	d := BuildPRReviews(prs()[1:2], Settings{"highlightNoReview": false, "minApprovals": 1})
+	if !slices.Equal(d.Items[0].Highlights, []string{"needs-approval"}) {
+		t.Fatalf("highlights = %v", d.Items[0].Highlights)
+	}
+}

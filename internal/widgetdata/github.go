@@ -12,8 +12,10 @@ import (
 // ReviewerStatus is one reviewer's latest position on a PR.
 type ReviewerStatus struct {
 	Login string    `json:"login"`
-	State string    `json:"state"` // APPROVED, CHANGES_REQUESTED, COMMENTED, PENDING (requested, not reviewed)
+	State string    `json:"state"` // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING (requested, not reviewed)
 	At    time.Time `json:"at"`
+	// Rerequested: review was requested again after this reviewer's last review.
+	Rerequested bool `json:"rerequested,omitempty"`
 }
 
 // PRRef is the part of a PR every list shows.
@@ -32,14 +34,21 @@ func ref(pr github.PR) PRRef {
 	return PRRef{Number: pr.Number, Title: pr.Title, URL: pr.URL, Repo: pr.Repo, Author: pr.Author, Draft: pr.Draft, Base: pr.Base, Since: pr.CreatedAt}
 }
 
-// Reviewers returns each reviewer's latest decisive review (approve or
-// request changes), falling back to their latest comment, plus requested
-// reviewers who have not reviewed yet. The PR author is excluded.
+func decisive(state string) bool { return state == "APPROVED" || state == "CHANGES_REQUESTED" }
+
+// Reviewers returns each reviewer's latest position, the way GitHub shows it:
+// the latest approve/request-changes wins over later comments; a dismissal
+// clears the decision; requested reviewers who have not reviewed are PENDING,
+// and ones asked again after reviewing are flagged Rerequested.
+// The PR author is excluded.
 func Reviewers(pr github.PR) []ReviewerStatus {
+	reviews := slices.Clone(pr.Reviews)
+	sort.SliceStable(reviews, func(i, j int) bool { return reviews[i].SubmittedAt.Before(reviews[j].SubmittedAt) })
+
 	latest := map[string]ReviewerStatus{}
 	var order []string
-	for _, r := range pr.Reviews {
-		if strings.EqualFold(r.Author, pr.Author) || r.State == "PENDING" || r.State == "DISMISSED" {
+	for _, r := range reviews {
+		if strings.EqualFold(r.Author, pr.Author) || r.State == "PENDING" || r.Author == "" {
 			continue
 		}
 		key := strings.ToLower(r.Author)
@@ -47,21 +56,24 @@ func Reviewers(pr github.PR) []ReviewerStatus {
 		if !seen {
 			order = append(order, key)
 		}
-		decisive := r.State == "APPROVED" || r.State == "CHANGES_REQUESTED"
-		curDecisive := cur.State == "APPROVED" || cur.State == "CHANGES_REQUESTED"
 		// A comment after a decision does not undo the decision.
-		if !seen || decisive || !curDecisive {
-			if !seen || !r.SubmittedAt.Before(cur.At) {
-				latest[key] = ReviewerStatus{Login: r.Author, State: r.State, At: r.SubmittedAt}
-			}
+		if r.State == "COMMENTED" && seen && decisive(cur.State) {
+			continue
 		}
+		latest[key] = ReviewerStatus{Login: r.Author, State: r.State, At: r.SubmittedAt}
+	}
+	requested := map[string]bool{}
+	for _, req := range pr.Requested {
+		requested[strings.ToLower(req)] = true
 	}
 	out := make([]ReviewerStatus, 0, len(order)+len(pr.Requested))
 	for _, key := range order {
-		out = append(out, latest[key])
+		st := latest[key]
+		st.Rerequested = requested[key]
+		out = append(out, st)
 	}
 	for _, req := range pr.Requested {
-		if _, ok := latest[strings.ToLower(req)]; !ok {
+		if _, ok := latest[strings.ToLower(req)]; !ok && req != "" {
 			out = append(out, ReviewerStatus{Login: req, State: "PENDING"})
 		}
 	}
@@ -118,7 +130,7 @@ func BuildPRReviews(prs []github.PR, s Settings) PRReviewsData {
 			case "CHANGES_REQUESTED":
 				changes = true
 				reviewed++
-			case "COMMENTED":
+			case "COMMENTED", "DISMISSED":
 				reviewed++
 			}
 		}
@@ -130,7 +142,8 @@ func BuildPRReviews(prs []github.PR, s Settings) PRReviewsData {
 			item.Highlights = append(item.Highlights, "changes-requested")
 			d.Summary.ChangesRequested++
 		}
-		if reviewed > 0 && item.Approvals < minApprovals && !changes {
+		noReviewShown := s.Bool("highlightNoReview", true) && reviewed == 0
+		if !noReviewShown && item.Approvals < minApprovals && !changes {
 			item.Highlights = append(item.Highlights, "needs-approval")
 			d.Summary.NeedsApproval++
 		}

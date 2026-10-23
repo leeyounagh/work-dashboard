@@ -1,11 +1,12 @@
 module github.com/leeyounagh/work-dashboard
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/google/uuid v1.6.0
 	github.com/wailsapp/wails/v2 v2.10.2
+	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.44.0
 )
 

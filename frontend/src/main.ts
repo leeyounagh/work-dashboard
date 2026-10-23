@@ -163,19 +163,33 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
     },
   };
 
-  /** Saves only the widget list, keeping unsaved name/notes/folder edits in the draft. */
-  const saveWidgets = async (widgets: Instance[]) => {
-    const current = saved();
-    if (!current) return;
-    try {
-      const result = await SaveWorkspace(models.Workspace.createFrom({ ...current, widgets }));
-      const workspaces = state.workspaces.map((w) => (w.id === result.id ? result : w));
-      const draft = state.draft ? { ...state.draft, widgets: result.widgets } : null;
-      state = { ...state, workspaces, draft };
-      render(false);
-    } catch (err) {
-      toast(String(err));
-    }
+  // Widget saves run one after another, each computed from the latest saved
+  // list, so quick toggles never overwrite each other.
+  let widgetQueue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Saves only the widget list of a workspace, keeping unsaved name/notes/
+   * folder edits in its draft. Resolves false when the save failed.
+   */
+  const saveWidgets = (workspaceId: string, update: (prev: Instance[]) => Instance[]): Promise<boolean> => {
+    const run = widgetQueue.then(async () => {
+      const current = state.workspaces.find((w) => w.id === workspaceId);
+      if (!current) return false;
+      try {
+        const result = await SaveWorkspace(models.Workspace.createFrom({ ...current, widgets: update(current.widgets) }));
+        const workspaces = state.workspaces.map((w) => (w.id === result.id ? result : w));
+        // Only the draft of this workspace gets the new widgets; the user may have switched meanwhile.
+        const draft = state.draft?.id === result.id ? { ...state.draft, widgets: result.widgets } : state.draft;
+        state = { ...state, workspaces, draft };
+        if (state.selectedId === result.id) render(false);
+        return true;
+      } catch (err) {
+        toast(String(err));
+        return false;
+      }
+    });
+    widgetQueue = run;
+    return run;
   };
 
   return { reload, saveWidgets };
@@ -242,11 +256,17 @@ async function start() {
     board?.show(next.workspace);
   });
   board = new WidgetBoard(byId('widget-board'), workspaces.saveWidgets, toast);
+  import.meta.hot?.dispose(() => board.destroy());
 
+  const loadCatalog = async () => {
+    try {
+      board.setCatalog(orEmpty((await WidgetCatalog()) as Definition[]));
+    } catch (err) {
+      board.setCatalogError(String(err), () => void loadCatalog());
+    }
+  };
   // reload() reports its own errors in the sidebar.
-  const [catalog] = await Promise.allSettled([WidgetCatalog(), workspaces.reload(null)]);
-  if (catalog.status === 'fulfilled') board.setCatalog(orEmpty(catalog.value as Definition[]));
-  else toast(`위젯 목록을 불러오지 못했습니다: ${String(catalog.reason)}`);
+  await Promise.all([loadCatalog(), workspaces.reload(null)]);
   board.show(selection.workspace);
 }
 

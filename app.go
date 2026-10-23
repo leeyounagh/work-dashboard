@@ -45,10 +45,10 @@ type Deps struct {
 	NewSessionID func() string
 	// PickFolder shows a native folder picker ("" when cancelled).
 	PickFolder func(ctx context.Context) (string, error)
-	// TerminalsLocked disables terminal bindings. `wails dev` exposes bound
-	// methods to any web page over its websocket, so dev builds lock them
-	// unless WD_DEV_TERMINALS=1 is set.
-	TerminalsLocked bool
+	// DevLocked disables every binding that runs commands or returns local
+	// data. `wails dev` exposes bound methods to any web page over its
+	// websocket, so dev builds lock them unless WD_DEV_UNLOCK=1 is set.
+	DevLocked bool
 	// Bridge connects Claude sessions back to the dashboard (nil disables it).
 	Bridge claudeBridge
 	// RunDir holds per-session bridge config files.

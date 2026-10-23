@@ -74,8 +74,8 @@ const searchQuery = `query($q: String!) {
         author { login }
         repository { nameWithOwner }
         baseRefName headRefName
-        reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { name } } } }
-        reviews(first: 100) { nodes { author { login } state submittedAt } }
+        reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Bot { login } ... on Team { name } } } }
+        reviews(last: 100) { nodes { author { login } state submittedAt } }
         commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 100) { nodes {
           ... on CheckRun { name conclusion status detailsUrl }
           ... on StatusContext { context state targetUrl }
@@ -174,7 +174,8 @@ func convert(n gqlPR) PR {
 		pr.ReviewDecision = *n.ReviewDecision
 	}
 	for _, r := range n.ReviewRequests.Nodes {
-		if r.RequestedReviewer != nil {
+		// Unknown reviewer kinds (e.g. mannequins) decode as empty objects.
+		if r.RequestedReviewer != nil && r.RequestedReviewer.name() != "" {
 			pr.Requested = append(pr.Requested, r.RequestedReviewer.name())
 		}
 	}
