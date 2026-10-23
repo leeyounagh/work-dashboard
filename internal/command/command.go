@@ -54,8 +54,15 @@ func Split(line string) ([]string, error) {
 // even though no shell is used. Refusing them keeps "no shell" true.
 var errBatch = errors.New("배치 파일(.cmd/.bat)은 실행하지 않습니다. node.exe, pwsh.exe 처럼 실행 파일을 직접 지정하세요")
 
+// isBatch reports whether Windows would run name as a batch file. Windows
+// ignores trailing dots and spaces and an alternate data stream suffix
+// (run.cmd., "run.cmd ", run.cmd::$DATA all start run.cmd).
 func isBatch(name string) bool {
-	ext := strings.ToLower(filepath.Ext(name))
+	base := filepath.Base(name)
+	if i := strings.IndexByte(base, ':'); i >= 0 {
+		base = base[:i]
+	}
+	ext := strings.ToLower(filepath.Ext(strings.TrimRight(base, ". ")))
 	return ext == ".cmd" || ext == ".bat"
 }
 
@@ -93,19 +100,28 @@ func Run(ctx context.Context, dir, line string) (Output, error) {
 	if err != nil {
 		return Output{}, err
 	}
-	if isBatch(args[0]) {
+	// A relative path like scriptsun is found in dir when the process
+	// starts, so it is resolved there (with PATHEXT) before the batch check.
+	name := args[0]
+	if strings.ContainsAny(name, `/\`) && !filepath.IsAbs(name) {
+		name = filepath.Join(dir, name)
+	}
+	if isBatch(name) {
 		return Output{}, errBatch
 	}
-	if resolved, err := exec.LookPath(args[0]); err == nil && isBatch(resolved) {
-		return Output{}, errBatch
+	if resolved, err := exec.LookPath(name); err == nil {
+		if isBatch(resolved) {
+			return Output{}, errBatch
+		}
+		name = resolved
 	}
-	cmd := procutil.Background(exec.CommandContext(ctx, args[0], args[1:]...))
+	cmd := procutil.Background(exec.CommandContext(ctx, name, args[1:]...))
 	cmd.Dir = dir
 	cmd.WaitDelay = procutil.WaitDelay
 	var stdout, stderr capped
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err = cmd.Run()
-	out := Output{Stdout: stdout.buf.String(), Stderr: stderr.buf.String(), Truncated: stdout.truncated || stderr.truncated}
+	out := Output{Stdout: decode(stdout.buf.Bytes()), Stderr: decode(stderr.buf.Bytes()), Truncated: stdout.truncated || stderr.truncated}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		out.ExitCode = exitErr.ExitCode()

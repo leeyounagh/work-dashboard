@@ -62,7 +62,7 @@ const highlight = HighlightStyle.define([
   { tag: [t.propertyName, t.attributeName], color: '#e06c75' },
   { tag: [t.heading, t.strong], color: '#e5c07b', fontWeight: 'bold' },
   { tag: [t.deleted, t.invalid], color: '#f2777a' },
-  { tag: t.link, color: '#7aa2f7', textDecoration: 'underline' },
+  { tag: t.link, color: '#d4a27f', textDecoration: 'underline' },
 ]);
 
 function editor(parent: HTMLElement, text: string, lang: Language): EditorView {

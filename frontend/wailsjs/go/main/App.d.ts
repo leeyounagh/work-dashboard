@@ -23,6 +23,8 @@ export function OpenClaude(arg1:string,arg2:number,arg3:number):Promise<term.Inf
 
 export function OpenShell(arg1:string,arg2:number,arg3:number):Promise<term.Info>;
 
+export function OpenWidgetFile(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function PickFolder():Promise<string>;
 
 export function ReadFile(arg1:string):Promise<files.Content>;

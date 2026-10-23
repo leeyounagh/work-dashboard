@@ -71,6 +71,8 @@ type Deps struct {
 	CharactersDir string
 	// Restorable are sessions that were open when the app last exited.
 	Restorable []sessions.Record
+	// OpenPath opens a file with its default app (nil disables it).
+	OpenPath func(path string) error
 }
 
 // App holds the methods bound to the frontend.

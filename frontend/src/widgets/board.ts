@@ -80,7 +80,7 @@ export class WidgetBoard {
     private readonly host: HTMLElement,
     private readonly saveWidgets: SaveWidgets,
     private readonly toast: (message: string) => void,
-    private readonly actionsFor: (workspaceId: string) => WidgetActions,
+    private readonly actionsFor: (workspaceId: string, widgetId?: string) => WidgetActions,
   ) {}
 
   setCatalog(catalog: Definition[]): void {
@@ -216,7 +216,7 @@ export class WidgetBoard {
         const res = (await (fresh ? RefreshWidget : WidgetData)(ws.id, index)) as Result;
         if (gen !== this.generation) return;
         if (res.error) body.replaceChildren(h('p', 'error small', res.error));
-        else body.replaceChildren(renderData(res.type, res.data, this.actionsFor(ws.id)));
+        else body.replaceChildren(renderData(res.type, res.data, this.actionsFor(ws.id, inst.id)));
         when.textContent = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
         this.maybeAlert(res);
       } catch (err) {

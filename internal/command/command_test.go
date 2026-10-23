@@ -2,6 +2,8 @@ package command
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -67,5 +69,26 @@ func TestCappedOutput(t *testing.T) {
 	}
 	if n, _ := c.Write([]byte("more")); n != 4 || c.buf.Len() != maxOutput {
 		t.Fatal("writes past the cap must be dropped but reported as written")
+	}
+}
+
+func TestRunRefusesRelativeBatchFiles(t *testing.T) {
+	// exec resolves scripts\run against the working folder at start, where
+	// scripts\run.cmd would be picked up through PATHEXT.
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "scripts"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "scripts", "run.cmd"), []byte("@echo ran"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{
+		`scripts\run`, `scripts/run`, `.\scripts\run.cmd`,
+		// Windows drops trailing dots and spaces, and ::$DATA names the file itself.
+		`.\scripts\run.cmd.`, `".\scripts\run.cmd "`, `scripts\run.cmd::$DATA`,
+	} {
+		if _, err := Run(context.Background(), dir, line); err == nil || !strings.Contains(err.Error(), ".cmd") {
+			t.Errorf("Run(%q) err = %v", line, err)
+		}
 	}
 }

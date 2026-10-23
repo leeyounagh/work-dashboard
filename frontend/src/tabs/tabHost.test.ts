@@ -76,6 +76,7 @@ describe('TabHost', () => {
 
 describe('TabHost groups', () => {
   it('shows only the current workspace tabs and returns to its last tab', () => {
+    host.setGroup('gw');
     host.add(tab('gw-1', { group: 'gw' }));
     host.add(tab('gw-2', { group: 'gw' }));
     host.activate('gw-1');
@@ -88,6 +89,16 @@ describe('TabHost groups', () => {
     expect(shown).toHaveLength(1);
     host.setGroup('gw');
     expect(host.activeId).toBe('gw-1');
+  });
+
+  it('hides workspace tabs when no workspace is selected', () => {
+    host.setGroup('gw');
+    host.add(tab('gw-1', { group: 'gw' }));
+    host.add(tab('free'));
+    host.setGroup(null);
+    const shown = [...strip.children].filter((e) => !e.classList.contains('hidden'));
+    expect(shown).toHaveLength(1);
+    expect(host.activeId).toBe('free');
   });
 
   it('keeps tabs opened for another workspace in the background', () => {

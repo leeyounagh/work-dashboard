@@ -1,4 +1,4 @@
-import { DESK_H, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
+import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
 import { drawDesk, drawRoom, drawRug } from './background';
 import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, frameRect, pickSheet, sheets, type Direction } from './sprites';
 
@@ -7,6 +7,7 @@ export interface OfficeTerminal {
   id: string;
   title: string; // terminal (tab) name, shown above the character
   workspace: string; // workspace name, shown below
+  workspaceId: string;
   kind: 'claude' | 'shell';
   alive: boolean;
 }
@@ -16,7 +17,7 @@ const SIZE = FRAME * SCALE;
 const COLORS = {
   monitor: '#1b1c1f',
   screenIdle: '#2e3a4f',
-  screenWork: '#7aa2f7',
+  screenWork: '#d4a27f',
   screenWait: '#e5c07b',
   name: '#e3e5e8',
   label: '#9aa0a6',
@@ -34,6 +35,7 @@ interface Character {
   dog: boolean;
   dir: Direction;
   desk: number;
+  shown: boolean; // in the selected workspace
   x: number;
   y: number;
   tx: number;
@@ -93,16 +95,24 @@ export class Office {
     }
   }
 
-  /** Keeps one character per terminal shown. */
-  sync(terminals: OfficeTerminal[]): void {
+  /**
+   * Keeps one character per terminal. Every terminal keeps its state (so hook
+   * events for other workspaces are not lost); only the selected workspace's
+   * characters are shown, at desks numbered among themselves.
+   */
+  sync(terminals: OfficeTerminal[], workspaceId: string | null): void {
     const ids = new Set(terminals.map((t) => t.id));
     for (const id of [...this.chars.keys()]) if (!ids.has(id)) this.chars.delete(id);
-    terminals.forEach((term, i) => {
+    let desk = 0;
+    for (const term of terminals) {
+      const shown = term.workspaceId === workspaceId;
+      const i = shown ? desk++ : 0;
       const existing = this.chars.get(term.id);
       if (existing) {
         existing.term = term;
         existing.desk = i;
-        return;
+        existing.shown = shown;
+        continue;
       }
       const spot = deskSpot(i, this.width);
       const sheet = pickSheet(term.id, term.kind, this.art.ninjas, this.art.dog);
@@ -113,6 +123,7 @@ export class Office {
         dog: sheet === this.art.dog,
         dir: 'down',
         desk: i,
+        shown,
         x: spot.x,
         y: this.height - 30,
         tx: spot.x,
@@ -120,7 +131,11 @@ export class Office {
         nextWander: 0,
         phase: Math.random() * Math.PI * 2,
       });
-    });
+    }
+  }
+
+  private visible(): Character[] {
+    return [...this.chars.values()].filter((c) => c.shown);
   }
 
   /** Applies a Claude hook event to its character. */
@@ -153,7 +168,10 @@ export class Office {
     const r = this.canvas.getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
-    return [...this.chars.values()].find((c) => Math.abs(x - c.x) < SIZE / 2 && y > c.y - SIZE && y < c.y + 4);
+    // Front-most (lowest) character first, matching the drawing order.
+    return this.visible()
+      .sort((a, b) => b.y - a.y)
+      .find((c) => Math.abs(x - c.x) < SIZE / 2 && y > c.y - SIZE && y < c.y + 4);
   }
 
   private loop(t: number) {
@@ -168,13 +186,13 @@ export class Office {
   /** Busy characters go to their desk; idle ones float around the open floor. */
   private update(now: number) {
     const openTop = this.deskAreaBottom() + 30;
-    for (const c of this.chars.values()) {
+    for (const c of this.visible()) {
       const spot = deskSpot(c.desk, this.width);
       const busy = c.state.mood !== 'idle' && c.term.alive;
       if (busy) {
         // On the stool in front of the desk.
         c.tx = spot.x;
-        c.ty = spot.y + DESK_H - 2;
+        c.ty = spot.y + SEAT_Y;
       } else if (now > c.nextWander) {
         c.tx = 30 + Math.random() * Math.max(1, this.width - 60);
         c.ty = Math.min(this.height - 22, openTop + SIZE + Math.random() * Math.max(1, this.height - openTop - SIZE - 22));
@@ -198,16 +216,18 @@ export class Office {
   }
 
   private deskAreaBottom(): number {
-    if (!this.chars.size) return 0;
-    return deskSpot(this.chars.size - 1, this.width).y + DESK_H;
+    const n = this.visible().length;
+    if (!n) return 0;
+    return deskSpot(n - 1, this.width).y + DESK_H;
   }
 
   private draw(now: number) {
     const { ctx, width: w, height: h } = this;
     drawRoom(ctx, w, h, WALL_H);
-    if (this.chars.size) drawRug(ctx, w, this.deskAreaBottom(), h);
+    const shown = this.visible();
+    if (shown.length) drawRug(ctx, w, this.deskAreaBottom(), h);
 
-    if (!this.chars.size) {
+    if (!shown.length) {
       ctx.fillStyle = COLORS.label;
       ctx.font = `12px ${FONT}`;
       ctx.textAlign = 'center';
@@ -215,9 +235,9 @@ export class Office {
       return;
     }
 
-    for (const c of this.chars.values()) this.drawDesk(c);
+    for (const c of shown) this.drawDesk(c);
     // Back to front so lower characters overlap higher ones.
-    for (const c of [...this.chars.values()].sort((a, b) => a.y - b.y)) this.drawCharacter(c, now);
+    for (const c of shown.sort((a, b) => a.y - b.y)) this.drawCharacter(c, now);
   }
 
   private drawDesk(c: Character) {

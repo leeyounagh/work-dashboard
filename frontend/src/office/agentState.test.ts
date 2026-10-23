@@ -4,6 +4,11 @@ import { WALL_H, bubbleFor, deskSpot, nextState, progressOf, type AgentState } f
 const idle: AgentState = { mood: 'idle', tool: '', since: 0 };
 
 describe('nextState', () => {
+  it('goes idle when the user interrupts a request', () => {
+    const working = nextState(nextState(idle, { event: 'UserPromptSubmit' }, 1), { event: 'PreToolUse', tool: 'Bash' }, 2);
+    expect(nextState(working, { event: 'Interrupt' }, 3).mood).toBe('idle');
+  });
+
   it('follows a Claude turn: prompt → thinking → working → thinking → done', () => {
     let s = nextState(idle, { event: 'UserPromptSubmit' }, 1);
     expect(s.mood).toBe('thinking');

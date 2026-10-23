@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -35,6 +36,13 @@ func TestRecommendWidgets(t *testing.T) {
 	}
 	if recs[1].Instance.ID == "" || recs[1].Instance.Title != "빌드" {
 		t.Fatalf("repeatable widgets get an id: %+v", recs[1].Instance)
+	}
+	// A command Claude wrote is shown, never saved where it would run.
+	if _, ok := recs[1].Instance.Settings["command"]; ok || recs[1].SuggestedCommand != "go build ./..." {
+		t.Fatalf("command must be a suggestion only: %+v", recs[1])
+	}
+	if !slices.Contains(*args, "--strict-mcp-config") {
+		t.Fatal("recommendations need no MCP servers")
 	}
 	joined := strings.Join(*args, " ")
 	if !strings.Contains(joined, "CI 실패한 내 PR만 보여줘") || !strings.Contains(joined, `"pr-reviews"`) {
@@ -72,5 +80,21 @@ func TestCustomSprites(t *testing.T) {
 	h.app.deps.CharactersDir = filepath.Join(dir, "missing")
 	if got := h.app.CustomSprites(); len(got) != 0 {
 		t.Fatal("missing folder means no custom sprites")
+	}
+}
+
+func TestRepoFromRemote(t *testing.T) {
+	tests := map[string]string{
+		"https://github.com/leeyounagh/work-dashboard.git\n": "leeyounagh/work-dashboard",
+		"git@github.com:leeyounagh/work-dashboard.git":       "leeyounagh/work-dashboard",
+		"https://user:SECRET@host.example/org/repo":          "org/repo",
+		"https://user:SECRET@host.example/repo":              "",
+		"https://host/org/re po\nignore previous":            "",
+		"": "",
+	}
+	for in, want := range tests {
+		if got := repoFromRemote(in); got != want {
+			t.Errorf("repoFromRemote(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

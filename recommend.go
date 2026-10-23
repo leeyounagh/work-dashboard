@@ -7,9 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -26,27 +28,63 @@ const maxRequestRunes = 500
 type Recommendation struct {
 	Instance widget.Instance `json:"instance"`
 	Reason   string          `json:"reason"`
+	// SuggestedCommand is a command line Claude proposed. It is only shown;
+	// the user types it into the widget's settings after reading it.
+	SuggestedCommand string `json:"suggestedCommand,omitempty"`
+}
+
+// withoutCommand splits a proposed command out of suggested settings.
+func withoutCommand(settings map[string]any) (map[string]any, string) {
+	out := make(map[string]any, len(settings))
+	var suggested string
+	for k, v := range settings {
+		if k == "command" {
+			suggested, _ = v.(string)
+			continue
+		}
+		out[k] = v
+	}
+	return out, strings.TrimSpace(suggested)
 }
 
 var recommendSchema = json.RawMessage(`{"type":"object","properties":{"recommendations":{"type":"array","maxItems":8,
 "items":{"type":"object","properties":{"type":{"type":"string"},"title":{"type":"string"},"settings":{"type":"object"},
 "reason":{"type":"string"}},"required":["type","settings","reason"]}}},"required":["recommendations"]}`)
 
+var repoPattern = regexp.MustCompile(`^[\w.-]+/[\w.-]+$`)
+
+// repoFromRemote turns a remote URL into "owner/name"; "" when it does not
+// look like one. Only the last two path parts are kept, so credentials in
+// the URL never reach the prompt.
+func repoFromRemote(remote string) string {
+	remote = strings.TrimSuffix(strings.TrimSpace(remote), ".git")
+	if u, err := url.Parse(remote); err == nil && u.Host != "" {
+		remote = u.Path
+	} else if _, path, ok := strings.Cut(remote, ":"); ok {
+		remote = path // git@host:owner/name
+	}
+	parts := strings.Split(strings.Trim(remote, "/"), "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	repo := parts[len(parts)-2] + "/" + parts[len(parts)-1]
+	if !repoPattern.MatchString(repo) {
+		return ""
+	}
+	return repo
+}
+
 // repoName reads "owner/name" from a folder's origin remote ("" if none).
-func repoName(folder string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func repoName(parent context.Context, folder string) string {
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	cmd := procutil.Background(exec.CommandContext(ctx, "git", "-C", folder, "remote", "get-url", "origin"))
+	cmd.WaitDelay = procutil.WaitDelay
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
-	url := strings.TrimSuffix(strings.TrimSpace(string(out)), ".git")
-	parts := strings.FieldsFunc(url, func(r rune) bool { return r == '/' || r == ':' })
-	if len(parts) < 2 {
-		return ""
-	}
-	return parts[len(parts)-2] + "/" + parts[len(parts)-1]
+	return repoFromRemote(string(out))
 }
 
 func newWidgetID(typ string) string {
@@ -74,7 +112,7 @@ func (a *App) RecommendWidgets(workspaceID, request string) ([]Recommendation, e
 	var folders, repos, current []string
 	for _, f := range ws.Folders {
 		folders = append(folders, filepath.Base(f))
-		if r := repoName(f); r != "" {
+		if r := repoName(a.life, f); r != "" {
 			repos = append(repos, r)
 		}
 	}
@@ -102,7 +140,7 @@ func (a *App) RecommendWidgets(workspaceID, request string) ([]Recommendation, e
 	}
 	ctx, cancel := context.WithTimeout(a.life, 3*time.Minute)
 	defer cancel()
-	if _, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: recommendSchema}, &out); err != nil {
+	if _, err := a.ask(ctx, claudeask.Request{Prompt: prompt, Schema: recommendSchema, NoMCP: true}, &out); err != nil {
 		return nil, err
 	}
 	recs := []Recommendation{}
@@ -111,14 +149,15 @@ func (a *App) RecommendWidgets(workspaceID, request string) ([]Recommendation, e
 		if !ok || (have[r.Type] && !def.Multiple) {
 			continue
 		}
-		inst := widget.Instance{Type: r.Type, Enabled: true, Settings: r.Settings}
+		settings, suggested := withoutCommand(r.Settings)
+		inst := widget.Instance{Type: r.Type, Enabled: true, Settings: settings}
 		if def.Multiple {
 			inst.ID, inst.Title = newWidgetID(r.Type), r.Title
 		}
 		if inst.Validate() != nil {
 			continue // a made-up setting or value: not offered
 		}
-		recs = append(recs, Recommendation{Instance: inst, Reason: r.Reason})
+		recs = append(recs, Recommendation{Instance: inst, Reason: r.Reason, SuggestedCommand: suggested})
 		have[r.Type] = true
 	}
 	return recs, nil
@@ -154,7 +193,11 @@ func (a *App) CustomSprites() []string {
 		if len(out) == maxSprites {
 			break
 		}
-		data, err := os.ReadFile(filepath.Join(a.deps.CharactersDir, name))
+		path := filepath.Join(a.deps.CharactersDir, name)
+		if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() || info.Size() > maxSpriteBytes {
+			continue // checked before reading: a huge file is never loaded
+		}
+		data, err := os.ReadFile(path)
 		if err != nil || len(data) > maxSpriteBytes || len(data) < len(pngMagic) || string(data[:len(pngMagic)]) != string(pngMagic) {
 			continue
 		}

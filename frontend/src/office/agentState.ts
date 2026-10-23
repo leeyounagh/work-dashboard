@@ -39,6 +39,7 @@ export function nextState(s: AgentState, ev: HookInput, now: number): AgentState
       // Permission prompts and "waiting for input" both need the user.
       return { ...s, mood: 'waiting', since: now };
     case 'Stop':
+    case 'Interrupt': // the user pressed Esc (seen in the terminal output)
     case 'SessionStart':
     case 'SessionEnd':
       return { mood: 'idle', tool: '', since: now };
@@ -77,7 +78,10 @@ export function bubbleFor(s: AgentState): string {
 }
 
 export const DESK_W = 112; // a 96px desk plus room to walk
-export const DESK_H = 84;
+/** Row pitch: a desk, the seated character in front of it and its labels. */
+export const DESK_H = 128;
+/** How far below a desk's top its stool (the seated character's feet) is. */
+export const SEAT_Y = 82;
 /** Height of the bookshelf wall at the top of the office. */
 export const WALL_H = 72;
 const MARGIN = 16;

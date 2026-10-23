@@ -32,19 +32,25 @@ const (
 	askErrorFor = 10 * time.Minute
 )
 
+// linearTools names tools of both Linear servers: a user-configured "linear"
+// MCP server and the claude.ai connector (the only one left when lookups run
+// without user settings).
+func linearTools(names ...string) []string {
+	out := make([]string, 0, len(names)*2)
+	for _, n := range names {
+		out = append(out, "mcp__linear__"+n, "mcp__claude_ai_Linear__"+n)
+	}
+	return out
+}
+
 // Exact read-only tools for connector lookups (see claudeask.Request).
 var (
-	linearReadTools = []string{
-		"mcp__linear__list_issues", "mcp__linear__get_issue", "mcp__linear__list_teams",
-		"mcp__linear__list_issue_statuses", "mcp__linear__get_user",
-	}
-	linearInboxTools = []string{"mcp__linear__get_notifications", "mcp__linear__get_issue", "mcp__linear__get_user"}
-	linearWriteTools = []string{
-		"mcp__linear__save_issue", "mcp__linear__save_comment", "mcp__linear__delete_comment",
-		"mcp__linear__create_attachment", "mcp__linear__delete_attachment", "mcp__linear__share_issue",
-		"mcp__linear__save_project", "mcp__linear__save_document", "mcp__linear__merge_diff",
-		"mcp__linear__mark_notification",
-	}
+	linearReadTools  = linearTools("list_issues", "get_issue", "list_teams", "list_issue_statuses", "get_user")
+	linearInboxTools = linearTools("get_notifications", "get_issue", "get_user")
+	linearWriteTools = linearTools(
+		"save_issue", "save_comment", "delete_comment", "create_attachment", "delete_attachment",
+		"share_issue", "save_project", "save_document", "merge_diff", "mark_notification",
+	)
 	notionReadTools  = []string{"mcp__claude_ai_Notion__notion-fetch"}
 	notionWriteTools = []string{
 		"mcp__claude_ai_Notion__notion-update-page", "mcp__claude_ai_Notion__notion-create-pages",
@@ -194,6 +200,8 @@ func (a *App) buildLocalWidget(ctx context.Context, ws workspace.Workspace, typ 
 		return a.commandWidget(ctx, ws, s)
 	case widget.Links:
 		return linksWidget(s), nil
+	case widget.FolderFiles:
+		return folderFiles(s)
 	default:
 		return PlannedData{Planned: true, Message: typ + " 위젯은 아직 지원하지 않습니다"}, nil
 	}
@@ -267,7 +275,14 @@ func (a *App) cachedAsk(key string, fresh bool, fetch func() (any, error)) (any,
 			return nil, e.err
 		}
 	}
-	v, err, _ := a.asks.flight.Do(key, fetch)
+	v, err, _ := a.asks.flight.Do(key, func() (any, error) {
+		v, err := fetch()
+		// claude.ai connectors load in the background; a cold start can miss them.
+		if errors.Is(err, errNoConnector) {
+			v, err = fetch()
+		}
+		return v, err
+	})
 	a.asks.mu.Lock()
 	a.asks.entries[key] = askEntry{data: v, err: err, at: time.Now()}
 	for k, old := range a.asks.entries {

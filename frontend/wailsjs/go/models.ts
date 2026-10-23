@@ -250,6 +250,7 @@ export namespace main {
 	export class Recommendation {
 	    instance: widget.Instance;
 	    reason: string;
+	    suggestedCommand?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Recommendation(source);
@@ -259,6 +260,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.instance = this.convertValues(source["instance"], widget.Instance);
 	        this.reason = source["reason"];
+	        this.suggestedCommand = source["suggestedCommand"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

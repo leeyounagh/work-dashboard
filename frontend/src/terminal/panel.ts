@@ -8,6 +8,7 @@ import { clipboardAction } from './clipboard';
 import { base64ToBytes } from '../lib/workspaceDraft';
 import type { TabHost } from '../tabs/tabHost';
 import { EarlyEvents, type TermExit } from './earlyEvents';
+import { InterruptWatch } from './interrupt';
 
 export type TerminalKind = 'claude' | 'shell';
 
@@ -50,6 +51,8 @@ export class TerminalPanel {
   // Launches run one at a time (each measures its pane), in order, never dropped.
   private queue: Promise<void> = Promise.resolve();
   private readonly listeners = new Set<(list: TerminalInfo[]) => void>();
+  private readonly interrupts = new InterruptWatch();
+  private readonly interruptListeners = new Set<(id: string) => void>();
 
   // Late events for tabs the user already closed are dropped, not buffered.
   private readonly closed = new Set<string>();
@@ -65,6 +68,11 @@ export class TerminalPanel {
     ];
     this.resizeObserver = new ResizeObserver(() => this.fitActive());
     this.resizeObserver.observe(body);
+  }
+
+  /** Notified when the user stops a Claude request with Esc (Claude Code sends no hook for it). */
+  onInterrupt(listener: (id: string) => void): void {
+    this.interruptListeners.add(listener);
   }
 
   /** Notified whenever terminals open, close or exit (used by the office floor). */
@@ -236,8 +244,10 @@ export class TerminalPanel {
   private handleData(ev: TermData) {
     const bytes = base64ToBytes(ev.data);
     const session = this.sessions.get(ev.id);
-    if (session) session.term.write(bytes);
-    else if (!this.closed.has(ev.id)) this.early.data(ev.id, bytes);
+    if (session) {
+      session.term.write(bytes);
+      if (session.kind === 'claude' && this.interrupts.feed(ev.id, bytes)) for (const l of this.interruptListeners) l(ev.id);
+    } else if (!this.closed.has(ev.id)) this.early.data(ev.id, bytes);
   }
 
   private handleExit(ev: TermExit) {
@@ -276,6 +286,7 @@ export class TerminalPanel {
     const s = this.sessions.get(id);
     if (!s) return;
     this.sessions.delete(id);
+    this.interrupts.forget(id);
     if (s.alive) {
       this.closed.add(id); // its exit event is still to come
       try {

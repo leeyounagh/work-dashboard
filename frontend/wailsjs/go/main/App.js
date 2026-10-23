@@ -34,6 +34,10 @@ export function OpenShell(arg1, arg2, arg3) {
   return window['go']['main']['App']['OpenShell'](arg1, arg2, arg3);
 }
 
+export function OpenWidgetFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['OpenWidgetFile'](arg1, arg2, arg3);
+}
+
 export function PickFolder() {
   return window['go']['main']['App']['PickFolder']();
 }

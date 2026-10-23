@@ -27,6 +27,7 @@ type Request struct {
 	AllowedTools    []string
 	DisallowedTools []string // a second line of defense (write tools by name)
 	Model           string   // default "haiku": cheap and fast enough for lookups
+	NoMCP           bool     // load no MCP servers or connectors (plain questions)
 }
 
 // maxBudgetUSD caps one lookup's cost.
@@ -74,8 +75,14 @@ func Args(r Request) []string {
 		"--json-schema", string(r.Schema),
 		"--no-session-persistence",
 		"--tools", "", // no Bash/Read/Write/...: only the allowed MCP tools exist
-		"--permission-mode", "dontAsk", // deny instead of using the user's allow rules
+		// Only project settings, and the ask folder has none: the user's own
+		// allow rules (which dontAsk would honour) are not loaded.
+		"--setting-sources", "project",
+		"--permission-mode", "dontAsk", // anything not allowed here is denied
 		"--max-budget-usd", maxBudgetUSD,
+	}
+	if r.NoMCP {
+		args = append(args, "--strict-mcp-config") // with no --mcp-config: no servers at all
 	}
 	if len(r.AllowedTools) > 0 {
 		args = append(args, "--allowedTools", strings.Join(r.AllowedTools, ","))

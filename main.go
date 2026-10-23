@@ -112,6 +112,7 @@ func main() {
 		CharactersDir: filepath.Join(filepath.Dir(dir), "characters"),
 		Claude:        claudeacct.New(claudeacct.Options{}),
 		RunDir:        runDir,
+		OpenPath:      openWithDefaultApp,
 	})
 
 	err = wails.Run(&options.App{

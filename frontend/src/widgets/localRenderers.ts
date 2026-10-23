@@ -4,6 +4,32 @@ import { h, link, type OpenURL } from './renderers';
 export interface WidgetActions {
   startQA(feature: string, mode: string): void;
   resume(sessionId: string): void;
+  /** Opens a file listed by this folder widget with its default app. */
+  openFile?(name: string): void;
+}
+
+interface FolderFilesData {
+  folder: string;
+  files: Array<{ name: string; modified: string; size: number }> | null;
+  total: number;
+}
+
+export function renderFolderFiles(d: FolderFilesData, actions?: WidgetActions): HTMLElement {
+  const box = h('div', 'w-list');
+  const files = d.files ?? [];
+  box.append(h('div', 'w-summary', files.length < d.total ? `${d.total}개 중 ${files.length}개` : `${files.length}개`));
+  if (!files.length) box.append(h('p', 'muted small', '이 폴더에 보여 줄 문서가 없습니다.'));
+  for (const f of files) {
+    const row = h('div', 'w-meta');
+    const name = h('button', 'w-file w-link', f.name);
+    name.type = 'button';
+    name.title = `${d.folder}\\${f.name} — 누르면 기본 앱으로 엽니다`;
+    name.disabled = !actions?.openFile;
+    name.addEventListener('click', () => actions?.openFile?.(f.name));
+    row.append(name, h('span', 'muted', dateText(f.modified)));
+    box.append(row);
+  }
+  return box;
 }
 
 interface WorktreesData {
@@ -287,6 +313,8 @@ export function renderLocal(type: string, data: unknown, open: OpenURL, actions?
       return renderLinks(data as LinksData, open);
     case 'linear-inbox':
       return renderLinearInbox(data as LinearInboxData, open);
+    case 'folder-files':
+      return renderFolderFiles(data as FolderFilesData, actions);
     default:
       return null;
   }

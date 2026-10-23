@@ -43,7 +43,8 @@ export class TabHost {
   }
 
   private visible(t: Tab): boolean {
-    return !t.opts.group || this.group === null || t.opts.group === this.group;
+    // With no workspace selected only ungrouped tabs show.
+    return !t.opts.group || t.opts.group === this.group;
   }
 
   /** Shows only the tabs of a group (workspace) and returns to its last used tab. */
@@ -125,7 +126,8 @@ export class TabHost {
     input.select();
     let done = false;
     const finish = async (save: boolean) => {
-      if (done) return;
+      // A tab closed while being renamed is not renamed.
+      if (done || this.tabs.get(id) !== t) return;
       done = true;
       const name = input.value.trim();
       input.replaceWith(t.label);

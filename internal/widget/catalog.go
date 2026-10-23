@@ -28,6 +28,7 @@ const (
 	SessionRestore = "session-restore"
 	Command        = "command"
 	Links          = "links"
+	FolderFiles    = "folder-files"
 )
 
 // Definition describes a widget type the dashboard can render.
@@ -187,6 +188,18 @@ func init() {
 			Multiple:    true,
 			Settings: []SettingSpec{
 				{Key: "links", Label: "링크 (이름=URL)", Kind: KindStringList, Default: []string{}},
+			},
+		},
+		Definition{
+			ID:          FolderFiles,
+			Name:        "폴더 문서",
+			Description: "폴더 안 문서를 최근 수정 순으로 보여 주고, 누르면 기본 앱으로 엽니다",
+			Source:      SourceLocal,
+			Multiple:    true,
+			Settings: []SettingSpec{
+				{Key: "folder", Label: "폴더 경로", Kind: KindString, Default: ""},
+				{Key: "extensions", Label: "확장자 (비우면 전체, 예: md, html)", Kind: KindStringList, Default: []string{}},
+				{Key: "limit", Label: "보여 줄 개수", Kind: KindInt, Default: 20, Min: 1, Max: 100},
 			},
 		},
 	)

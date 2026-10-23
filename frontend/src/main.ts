@@ -5,6 +5,7 @@ import {
   DeleteWorkspace,
   PickFolder,
   CustomSprites,
+  OpenWidgetFile,
   RestorableSessions,
   SearchFiles,
   SaveWorkspace,
@@ -84,17 +85,23 @@ function startOffice(
     console.error('office failed to start', err);
     return undefined;
   }
-  // Only the selected workspace's terminals are in the office.
+  // Every terminal keeps a character; only the selected workspace's are shown.
   const refresh = () => {
     const ws = current();
     office.sync(
-      panel
-        .list()
-        .filter((t) => ws && t.workspaceId === ws.id)
-        .map(({ id, title, kind, alive }) => ({ id, title, kind, alive, workspace: ws?.name ?? '' })),
+      panel.list().map(({ id, title, kind, alive, workspaceId }) => ({
+        id,
+        title,
+        kind,
+        alive,
+        workspaceId,
+        workspace: ws && workspaceId === ws.id ? ws.name : '',
+      })),
+      ws?.id ?? null,
     );
   };
   panel.onChange(refresh);
+  panel.onInterrupt((termId) => office.event(termId, { event: 'Interrupt' }));
   // The user's own characters (~/.work-dashboard/characters), if any.
   CustomSprites()
     .then((urls) => {
@@ -174,7 +181,7 @@ interface Selection {
   dirty: boolean;
 }
 
-function createWorkspaceController(onSelectionChange: (selection: Selection) => void) {
+function createWorkspaceController(onSelectionChange: (selection: Selection) => void, onDeleted: (workspaceId: string) => void) {
   const listHost = byId('ws-list');
   const editorHost = byId('ws-editor');
   let state: SidebarState = { workspaces: [], problems: [], selectedId: null, draft: null, dirty: false, saving: false };
@@ -268,10 +275,11 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
     remove: async () => {
       // Name the saved workspace, not an unsaved edit of its name.
       const draft = saved();
-      const message = `「${draft?.name}」 워크스페이스를 삭제할까요? 폴더는 지워지지 않고, 열린 터미널은 계속 실행됩니다.`;
+      const message = `「${draft?.name}」 워크스페이스를 삭제할까요? 폴더는 지워지지 않고, 이 워크스페이스에서 연 터미널은 모두 닫힙니다.`;
       if (!draft || !window.confirm(message)) return;
       try {
         await DeleteWorkspace(draft.id);
+        onDeleted(draft.id);
         await reload(null);
       } catch (err) {
         toast(String(err));
@@ -400,15 +408,23 @@ async function start() {
     if (group !== shownGroup) {
       shownGroup = group;
       tabs.setGroup(group);
-      office?.refresh();
       resetSearch();
     }
+    office?.refresh(); // also picks up a renamed workspace
     tree.show(next.workspace); // re-renders only when the workspace or its folders changed
     board?.show(next.workspace);
+  }, (workspaceId) => {
+    // A deleted workspace's terminals have nowhere to be shown any more.
+    for (const t of panel.list()) {
+      if (t.workspaceId === workspaceId) panel.close(t.id).catch((err) => toast(`터미널을 닫지 못했습니다: ${String(err)}`));
+    }
   });
-  board = new WidgetBoard(byId('widget-board'), workspaces.saveWidgets, toast, (workspaceId) => ({
+  board = new WidgetBoard(byId('widget-board'), workspaces.saveWidgets, toast, (workspaceId, widgetId) => ({
     startQA: (feature, mode) => void panel.startQA(workspaceId, feature, mode),
     resume: (sessionId) => void panel.resume(workspaceId, sessionId),
+    openFile: widgetId
+      ? (name) => void OpenWidgetFile(workspaceId, widgetId, name).catch((err) => toast(`파일을 열지 못했습니다: ${String(err)}`))
+      : undefined,
   }));
   import.meta.hot?.dispose(() => board.destroy());
 

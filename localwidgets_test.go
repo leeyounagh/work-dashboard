@@ -392,3 +392,17 @@ func TestLinearInboxWidget(t *testing.T) {
 		t.Fatalf("unreadOnly not in prompt: %q", joined)
 	}
 }
+
+func TestConnectorLookupRetriesOnceWhenNotLoaded(t *testing.T) {
+	h, ws, calls, _ := localHarness(t, widget.Instance{Type: widget.LinearInbox, Enabled: true})
+	h.app.deps.Ask = func(context.Context, string, ...string) ([]byte, error) {
+		// The first run starts before the claude.ai connector has loaded.
+		if calls.Add(1) == 1 {
+			return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":false,"notifications":[]}}`), nil
+		}
+		return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":true,"notifications":[]}}`), nil
+	}
+	if res := h.app.WidgetData(ws.ID, 0); res.Error != "" || calls.Load() != 2 {
+		t.Fatalf("error %q after %d calls", res.Error, calls.Load())
+	}
+}

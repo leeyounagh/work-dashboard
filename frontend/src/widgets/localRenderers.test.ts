@@ -65,4 +65,30 @@ describe('renderLocal', () => {
   it('returns null for other widget types', () => {
     expect(renderLocal('pr-reviews', {}, open)).toBeNull();
   });
+
+  it('lists folder documents and opens one on click', () => {
+    const openFile = vi.fn();
+    const el = renderLocal(
+      'folder-files',
+      {
+        folder: 'C:\docs',
+        total: 3,
+        files: [
+          { name: '2026-10-23_새_문서.html', modified: '2026-10-23T09:00:00Z', size: 2048 },
+          { name: '메모.md', modified: '2026-10-20T09:00:00Z', size: 10 },
+        ],
+      },
+      open,
+      { startQA: vi.fn(), resume: vi.fn(), openFile },
+    )!;
+    expect(el.textContent).toContain('2026-10-23_새_문서.html');
+    expect(el.textContent).toContain('3개 중 2개');
+    el.querySelector<HTMLButtonElement>('button.w-file')!.click();
+    expect(openFile).toHaveBeenCalledWith('2026-10-23_새_문서.html');
+  });
+
+  it('says so when a folder has no documents', () => {
+    const el = renderLocal('folder-files', { folder: 'C:\docs', total: 0, files: null }, open)!;
+    expect(el.textContent).toContain('문서가 없습니다');
+  });
 });
