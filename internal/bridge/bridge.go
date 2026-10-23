@@ -9,7 +9,9 @@ package bridge
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -83,8 +85,14 @@ func Start(h Handlers) (*Server, error) {
 // URL is the base URL, e.g. http://127.0.0.1:51234.
 func (s *Server) URL() string { return "http://" + s.addr }
 
-// Token is the bearer token clients must send.
-func (s *Server) Token() string { return s.token }
+// SessionToken is the bearer token for one session. It is derived from the
+// run secret, so a session (or a tool running inside it) that reads its own
+// config file cannot speak for another session.
+func (s *Server) SessionToken(session string) string {
+	mac := hmac.New(sha256.New, []byte(s.token))
+	mac.Write([]byte(session))
+	return hex.EncodeToString(mac.Sum(nil))
+}
 
 // Close stops the server.
 func (s *Server) Close() {
@@ -93,7 +101,7 @@ func (s *Server) Close() {
 	_ = s.srv.Shutdown(ctx)
 }
 
-func (s *Server) allowed(r *http.Request) int {
+func (s *Server) allowed(r *http.Request, session string) int {
 	if r.Header.Get("Origin") != "" {
 		return http.StatusForbidden
 	}
@@ -102,7 +110,7 @@ func (s *Server) allowed(r *http.Request) int {
 		return http.StatusForbidden
 	}
 	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(got), []byte(s.SessionToken(session))) != 1 {
 		return http.StatusUnauthorized
 	}
 	return 0
@@ -110,13 +118,13 @@ func (s *Server) allowed(r *http.Request) int {
 
 // ServeHTTP routes /hook/<session> and /mcp/<session>.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if code := s.allowed(r); code != 0 {
-		http.Error(w, http.StatusText(code), code)
-		return
-	}
 	kind, session, ok := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	if !ok || !sessionPattern.MatchString(session) || (kind != "hook" && kind != "mcp") {
 		http.NotFound(w, r)
+		return
+	}
+	if code := s.allowed(r, session); code != 0 {
+		http.Error(w, http.StatusText(code), code)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -155,7 +163,7 @@ func (s *Server) serveHook(w http.ResponseWriter, r *http.Request, session strin
 // ClaudeConfig returns the --mcp-config and --settings JSON that connect a
 // Claude session to this bridge.
 func (s *Server) ClaudeConfig(session string) (mcpConfig, settings []byte) {
-	headers := map[string]string{"Authorization": "Bearer " + s.token}
+	headers := map[string]string{"Authorization": "Bearer " + s.SessionToken(session)}
 	mcpConfig, _ = json.Marshal(map[string]any{
 		"mcpServers": map[string]any{
 			"work-dashboard": map[string]any{

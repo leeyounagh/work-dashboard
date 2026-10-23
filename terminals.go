@@ -73,12 +73,19 @@ func (a *App) openClaude(workspaceID string, opts launch.ClaudeOptions, folders 
 	}
 	// The session ID doubles as the bridge key: hooks and MCP calls carry it in the URL.
 	key := opts.SessionID
+	if _, live := a.agents.get(key); live {
+		return term.Info{}, errors.New("이 Claude 세션은 이미 열려 있습니다")
+	}
 	mcpFile, settingsFile, err := a.writeBridgeFiles(key)
 	if err != nil {
 		return term.Info{}, fmt.Errorf("대시보드 연결 파일을 쓰지 못했습니다: %w", err)
 	}
 	opts.MCPConfigFile, opts.SettingsFile = mcpFile, settingsFile
-	a.agents.add(key, &agentSession{workspaceID: workspaceID, files: nonEmpty(mcpFile, settingsFile)})
+	if err := a.agents.add(key, &agentSession{workspaceID: workspaceID, files: nonEmpty(mcpFile, settingsFile)}); err != nil {
+		_ = os.Remove(mcpFile)
+		_ = os.Remove(settingsFile)
+		return term.Info{}, err
+	}
 
 	ws := workspace.Workspace{ID: workspaceID, Name: name, Folders: folders}
 	spec, err := launch.ClaudeSpec(ws, opts)
@@ -87,6 +94,11 @@ func (a *App) openClaude(workspaceID string, opts launch.ClaudeOptions, folders 
 		info, err = a.terms.Open(spec, cols, rows)
 		if err == nil {
 			a.agents.bindTerm(key, info.ID)
+			// The process may have exited before it was bound, in which case
+			// its exit event found nothing to clean up.
+			if !a.terms.Alive(info.ID) {
+				a.endAgentSession(info.ID)
+			}
 			return info, nil
 		}
 	}

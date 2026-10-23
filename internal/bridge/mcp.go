@@ -33,6 +33,10 @@ type rpcResponse struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
+// supportedVersions are MCP protocol versions whose request/response shapes
+// this server implements (JSON responses, tools only).
+var supportedVersions = map[string]bool{"2024-11-05": true, "2025-03-26": true, "2025-06-18": true}
+
 var openFilesTool = map[string]any{
 	"name": "open_files",
 	"description": "Show files to the user in the work-dashboard file tree and viewer. " +
@@ -80,7 +84,8 @@ func (s *Server) serveMCP(w http.ResponseWriter, r *http.Request, session string
 			ProtocolVersion string `json:"protocolVersion"`
 		}
 		_ = json.Unmarshal(req.Params, &p)
-		if p.ProtocolVersion == "" {
+		// Answer with the client's version only if we support it (MCP spec).
+		if !supportedVersions[p.ProtocolVersion] {
 			p.ProtocolVersion = defaultProtoVersion
 		}
 		resp.Result = map[string]any{

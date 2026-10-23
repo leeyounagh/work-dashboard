@@ -209,20 +209,22 @@ async function start() {
 
   let selection: Selection = { workspace: null, dirty: false };
   const editorBody = byId('editor-body');
-  const tabs = new TabHost(byId('editor-tabs'), editorBody, () => byId('editor-empty').classList.remove('hidden'));
+  const emptyNote = byId('editor-empty');
+  const tabs = new TabHost(byId('editor-tabs'), editorBody, (active) => emptyNote.classList.toggle('hidden', active !== null));
   const panel = new TerminalPanel(tabs, editorBody, toast);
-  import.meta.hot?.dispose(() => panel.dispose());
   const viewer = new FileViewer(tabs, toast);
-  const tree = new FileTree(byId('file-tree'), (path) => void viewer.open(path), toast);
-  new MutationObserver(() => byId('editor-empty').classList.toggle('hidden', tabs.activeId !== null)).observe(
-    byId('editor-tabs'),
-    { childList: true },
-  );
+  import.meta.hot?.dispose(() => {
+    panel.dispose();
+    viewer.dispose();
+  });
+  const tree = new FileTree(byId('file-tree'), (path) => void viewer.open(path));
 
-  // Claude (via the dashboard MCP tool) asked to show files: list them and open tabs.
+  // Claude (via the dashboard MCP tool) asked to show files: list them and open
+  // tabs. Only bring the first one to the front when it is the workspace in view.
   const offOpen = EventsOn('files:open', (ev: FilesEvent) => {
     tree.opened(ev.workspaceId, ev.paths);
-    ev.paths.forEach((p, i) => void viewer.open(p, i === 0));
+    const inView = ev.workspaceId === selection.workspace?.id;
+    ev.paths.forEach((p, i) => void viewer.open(p, inView && i === 0));
   });
   const offSeen = EventsOn('files:seen', (ev: FilesEvent) => {
     for (const p of ev.paths) tree.seen(ev.workspaceId, p, ev.tool ?? '');
@@ -233,14 +235,10 @@ async function start() {
   });
 
   const updateButtons = wireTerminalButtons(panel, () => selection);
-  let shownId: string | null = null;
   const workspaces = createWorkspaceController((next) => {
     selection = next;
     updateButtons();
-    if ((next.workspace?.id ?? null) !== shownId) {
-      shownId = next.workspace?.id ?? null;
-      tree.show(next.workspace);
-    }
+    tree.show(next.workspace); // re-renders only when the workspace or its folders changed
   });
 
   const catalogEl = byId('catalog');

@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/leeyounagh/work-dashboard/internal/procutil"
 )
 
 // ErrOutside is returned for paths that are not inside any allowed root.
@@ -27,7 +29,7 @@ var hidden = map[string]bool{".git": true}
 // Guard restricts access to a set of root folders.
 type Guard struct {
 	roots     []string // cleaned, as configured
-	realRoots []string // symlinks resolved
+	realRoots []string // what the roots really are (links and junctions followed)
 }
 
 // NewGuard allows paths inside any of roots. Roots that do not exist are ignored.
@@ -35,12 +37,47 @@ func NewGuard(roots []string) Guard {
 	g := Guard{}
 	for _, r := range roots {
 		clean := filepath.Clean(r)
-		if real, err := filepath.EvalSymlinks(clean); err == nil {
+		f, err := os.Open(clean)
+		if err != nil {
+			continue
+		}
+		real, err := finalPath(f)
+		f.Close()
+		if err == nil {
 			g.roots = append(g.roots, clean)
 			g.realRoots = append(g.realRoots, real)
 		}
 	}
 	return g
+}
+
+// open opens path if it is inside a root both as written and as the handle
+// really resolves (after symlinks and junctions). Checking the opened handle
+// means nothing can be swapped between the check and the read.
+func (g Guard) open(path string) (*os.File, string, error) {
+	if !filepath.IsAbs(path) {
+		return nil, "", fmt.Errorf("%w: %s is not absolute", ErrOutside, path)
+	}
+	clean := filepath.Clean(path)
+	// Lexical check first, so ../ tricks and missing files outside are reported
+	// as outside rather than "not found".
+	if !insideAny(clean, g.roots) && !insideAny(clean, g.realRoots) {
+		return nil, "", fmt.Errorf("%w: %s", ErrOutside, path)
+	}
+	f, err := os.Open(clean)
+	if err != nil {
+		return nil, "", err
+	}
+	real, err := finalPath(f)
+	if err != nil {
+		f.Close()
+		return nil, "", err
+	}
+	if !insideAny(real, g.realRoots) {
+		f.Close()
+		return nil, "", fmt.Errorf("%w: %s", ErrOutside, path)
+	}
+	return f, real, nil
 }
 
 func insideAny(path string, roots []string) bool {
@@ -60,26 +97,13 @@ func sameOrInside(path, root string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-// Resolve returns the real path for an absolute path inside an allowed root.
-// Symlinks are resolved first, so a link cannot point outside.
+// Resolve returns the real path for an existing path inside an allowed root.
 func (g Guard) Resolve(path string) (string, error) {
-	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("%w: %s is not absolute", ErrOutside, path)
-	}
-	clean := filepath.Clean(path)
-	// Check the path as written first, so ../ tricks and missing files outside
-	// are reported as outside rather than "not found".
-	if !insideAny(clean, g.roots) && !insideAny(clean, g.realRoots) {
-		return "", fmt.Errorf("%w: %s", ErrOutside, path)
-	}
-	real, err := filepath.EvalSymlinks(clean)
+	f, real, err := g.open(path)
 	if err != nil {
 		return "", err
 	}
-	// Then check where it really points, so a symlink cannot lead outside.
-	if !insideAny(real, g.realRoots) {
-		return "", fmt.Errorf("%w: %s", ErrOutside, path)
-	}
+	f.Close()
 	return real, nil
 }
 
@@ -101,11 +125,12 @@ type Entry struct {
 
 // ListDir lists a directory: folders first, then files, each sorted by name.
 func ListDir(g Guard, dir string) ([]Entry, error) {
-	real, err := g.Resolve(dir)
+	f, _, err := g.open(dir)
 	if err != nil {
 		return nil, err
 	}
-	items, err := os.ReadDir(real)
+	defer f.Close()
+	items, err := f.ReadDir(-1)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", dir, err)
 	}
@@ -140,13 +165,9 @@ type Content struct {
 
 // ReadFile reads up to max bytes of a text file. Binary files return no text.
 func ReadFile(g Guard, path string, max int64) (Content, error) {
-	real, err := g.Resolve(path)
+	f, _, err := g.open(path)
 	if err != nil {
 		return Content{}, err
-	}
-	f, err := os.Open(real)
-	if err != nil {
-		return Content{}, fmt.Errorf("open %s: %w", path, err)
 	}
 	defer f.Close()
 	info, err := f.Stat()
@@ -177,7 +198,11 @@ func Diff(g Guard, path string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", filepath.Dir(real), "diff", "--no-color", "HEAD", "--", filepath.Base(real))
+	// --literal-pathspecs: "[ab].txt" is a file name, not a glob.
+	// --no-ext-diff/--no-textconv/core.fsmonitor=false: a repo's own config
+	// must not make a click on "변경 보기" run commands.
+	cmd := procutil.Background(exec.CommandContext(ctx, "git", "--literal-pathspecs", "-c", "core.fsmonitor=false",
+		"-C", filepath.Dir(real), "diff", "--no-color", "--no-ext-diff", "--no-textconv", "HEAD", "--", filepath.Base(real)))
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError

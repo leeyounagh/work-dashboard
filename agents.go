@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -57,10 +58,16 @@ func newAgentRegistry() *agentRegistry {
 	return &agentRegistry{sessions: map[string]*agentSession{}, byTerm: map[string]string{}}
 }
 
-func (r *agentRegistry) add(key string, s *agentSession) {
+// add registers a session; a key that is still live is refused so that a
+// resumed session cannot hijack (and later delete) a running one.
+func (r *agentRegistry) add(key string, s *agentSession) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, live := r.sessions[key]; live {
+		return errors.New("이 Claude 세션은 이미 열려 있습니다")
+	}
 	r.sessions[key] = s
+	return nil
 }
 
 func (r *agentRegistry) bindTerm(key, termID string) {
@@ -200,4 +207,21 @@ func joinShort(items []string) string {
 		out += it
 	}
 	return out
+}
+
+// cleanRunDir removes bridge config files left by a previous run that ended
+// without cleanup (crash, forced kill). Their token is no longer valid anyway.
+func cleanRunDir(dir string) error {
+	for _, pattern := range []string{"*.mcp.json", "*.settings.json"} {
+		matches, err := filepath.Glob(filepath.Join(dir, pattern))
+		if err != nil {
+			return err
+		}
+		for _, m := range matches {
+			if err := os.Remove(m); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	return nil
 }

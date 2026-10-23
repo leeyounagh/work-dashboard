@@ -71,6 +71,12 @@ func (h *harness) eventsNamed(name string) []any {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessWith(t, nil)
+}
+
+// newHarnessWith uses newProc for started processes (nil = one that prints and stays alive).
+func newHarnessWith(t *testing.T, newProc func() term.Process) *harness {
+	t.Helper()
 	h := &harness{store: workspace.NewStore(t.TempDir())}
 	h.app = NewApp(Deps{
 		Workspaces: h.store,
@@ -78,6 +84,9 @@ func newHarness(t *testing.T) *harness {
 			h.mu.Lock()
 			h.specs = append(h.specs, spec)
 			h.mu.Unlock()
+			if newProc != nil {
+				return newProc(), nil
+			}
 			p := &fakeProc{out: make(chan []byte, 1), closed: make(chan struct{})}
 			p.out <- []byte("héllo")
 			return p, nil

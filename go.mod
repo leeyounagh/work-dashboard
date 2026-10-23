@@ -6,6 +6,7 @@ require (
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/google/uuid v1.6.0
 	github.com/wailsapp/wails/v2 v2.10.2
+	golang.org/x/sys v0.44.0
 )
 
 require (
@@ -35,6 +36,5 @@ require (
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 )

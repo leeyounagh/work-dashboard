@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addOpened, addSeen, baseName, emptyFileState, languageFor, relativeTo, type FileState } from './fileState';
+import { addOpened, addSeen, baseName, emptyFileState, languageFor, pathKey, relativeTo, type FileState } from './fileState';
 
 describe('languageFor', () => {
   it.each([
@@ -53,5 +53,18 @@ describe('file state', () => {
     expect(s.seen).toHaveLength(20);
     expect(s.seen[0]).toEqual({ path: 'f5', tool: 'Edit' });
     expect(s.seen.filter((e) => e.path === 'f5')).toHaveLength(1);
+  });
+});
+
+describe('pathKey', () => {
+  it('treats slashes, case and trailing separators as the same file', () => {
+    expect(pathKey('C:/a/B.ts')).toBe(pathKey('c:\\a\\b.ts'));
+    expect(pathKey('C:\\a\\')).toBe(pathKey('C:\\a'));
+  });
+
+  it('dedupes opened and seen files written differently', () => {
+    const s = addSeen(addSeen(emptyFileState(), 'C:\\a\\b.ts', 'Read'), 'c:/a/b.ts', 'Edit');
+    expect(s.seen).toHaveLength(1);
+    expect(addOpened(addOpened(emptyFileState(), ['C:\\x.go']), ['c:/X.go']).opened).toHaveLength(1);
   });
 });

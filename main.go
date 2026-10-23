@@ -40,6 +40,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("work-dashboard: %v", err)
 	}
+	runDir := filepath.Join(filepath.Dir(dir), "run")
+	if err := cleanRunDir(runDir); err != nil {
+		log.Printf("work-dashboard: could not clean %s: %v", runDir, err)
+	}
+
 	var app *App
 	// The bridge must exist before the app so sessions can be configured with
 	// its URL; its handlers reach the app once it is created below.
@@ -65,7 +70,7 @@ func main() {
 		},
 		TerminalsLocked: devBuild && os.Getenv("WD_DEV_TERMINALS") != "1",
 		Bridge:          br,
-		RunDir:          filepath.Join(filepath.Dir(dir), "run"),
+		RunDir:          runDir,
 	})
 
 	err = wails.Run(&options.App{

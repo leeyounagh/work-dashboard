@@ -16,8 +16,9 @@ import { shell } from '@codemirror/legacy-modes/mode/shell';
 import { diff } from '@codemirror/legacy-modes/mode/diff';
 
 import { FileDiff, ReadFile } from '../../wailsjs/go/main/App';
+import type { files } from '../../wailsjs/go/models';
 import type { TabHost } from '../tabs/tabHost';
-import { baseName, languageFor, type Language } from './fileState';
+import { baseName, languageFor, pathKey, type Language } from './fileState';
 
 const LANGUAGES: Record<Language, () => Extension> = {
   typescript: () => javascript({ typescript: true }),
@@ -85,28 +86,49 @@ function editor(parent: HTMLElement, text: string, lang: Language): EditorView {
   });
 }
 
+/** Text to show for a file, with a note for binary or truncated files. */
+function contentToText(c: files.Content): { text: string; lang: Language } {
+  if (c.binary) return { text: '(바이너리 파일은 표시하지 않습니다)', lang: 'text' };
+  const note = c.truncated ? `\n… (${Math.round(c.size / 1024)}KB 중 앞부분만 표시)` : '';
+  return { text: c.text + note, lang: languageFor(c.path) };
+}
+
 interface Viewer {
   view: EditorView;
   mode: 'file' | 'diff';
+  request: number; // bumps on every reload so stale responses are dropped
 }
 
-const fileTabId = (path: string) => `file:${path.toLowerCase()}`;
+const fileTabId = (path: string) => `file:${pathKey(path)}`;
 
 export class FileViewer {
   private readonly viewers = new Map<string, Viewer>();
+  private readonly pending = new Map<string, Promise<void>>();
 
   constructor(
     private readonly tabs: TabHost,
     private readonly onError: (message: string) => void,
   ) {}
 
-  /** Opens (or focuses) a file tab. */
+  /** Opens (or focuses) a file tab. With focus=false the current tab stays in front. */
   async open(path: string, focus = true): Promise<void> {
     const id = fileTabId(path);
+    const inFlight = this.pending.get(id);
+    if (inFlight) {
+      await inFlight;
+      if (focus) this.tabs.activate(id);
+      return;
+    }
     if (this.tabs.has(id)) {
       if (focus) this.tabs.activate(id);
       return;
     }
+    const p = this.load(id, path, focus).finally(() => this.pending.delete(id));
+    this.pending.set(id, p);
+    await p;
+  }
+
+  private async load(id: string, path: string, focus: boolean): Promise<void> {
     let content;
     try {
       content = await ReadFile(path);
@@ -114,7 +136,6 @@ export class FileViewer {
       this.onError(String(err));
       return;
     }
-    if (this.tabs.has(id)) return; // opened meanwhile
 
     const pane = document.createElement('div');
     pane.className = 'file-pane';
@@ -128,6 +149,7 @@ export class FileViewer {
     diffBtn.type = 'button';
     diffBtn.className = 'ghost';
     diffBtn.textContent = '변경 보기';
+    diffBtn.disabled = content.binary;
     const reloadBtn = document.createElement('button');
     reloadBtn.type = 'button';
     reloadBtn.className = 'ghost';
@@ -137,22 +159,21 @@ export class FileViewer {
     host.className = 'file-editor';
     pane.append(bar, host);
 
-    const note = content.binary
-      ? '(바이너리 파일은 표시하지 않습니다)'
-      : content.truncated
-        ? `\n… (${Math.round(content.size / 1024)}KB 중 앞부분만 표시)`
-        : '';
-    const viewer: Viewer = {
-      view: editor(host, content.binary ? note : content.text + note, content.binary ? 'text' : languageFor(path)),
-      mode: 'file',
-    };
+    const first = contentToText(content);
+    const viewer: Viewer = { view: editor(host, first.text, first.lang), mode: 'file', request: 0 };
     this.viewers.set(id, viewer);
 
     const show = async (mode: 'file' | 'diff') => {
+      const request = ++viewer.request;
       try {
-        const text = mode === 'diff' ? (await FileDiff(path)) || '(커밋 이후 변경 없음)' : (await ReadFile(path)).text;
+        let next: { text: string; lang: Language };
+        if (mode === 'diff') next = { text: (await FileDiff(path)) || '(커밋 이후 변경 없음)', lang: 'diff' };
+        else next = contentToText(await ReadFile(path));
+        // The tab was closed or a newer reload started while we waited.
+        if (this.viewers.get(id) !== viewer || request !== viewer.request) return;
+        const fresh = editor(host, next.text, next.lang);
         viewer.view.destroy();
-        viewer.view = editor(host, text, mode === 'diff' ? 'diff' : languageFor(path));
+        viewer.view = fresh;
         viewer.mode = mode;
         diffBtn.textContent = mode === 'diff' ? '파일 보기' : '변경 보기';
       } catch (err) {
@@ -162,22 +183,29 @@ export class FileViewer {
     diffBtn.addEventListener('click', () => void show(viewer.mode === 'diff' ? 'file' : 'diff'));
     reloadBtn.addEventListener('click', () => void show(viewer.mode));
 
-    const previous = this.tabs.activeId;
-    this.tabs.add({
-      id,
-      title: baseName(path),
-      tooltip: path,
-      kind: 'file',
-      pane,
-      onClose: () => this.close(id),
-    });
-    // Background opens (several files at once) keep the current tab in front.
-    if (!focus && previous) this.tabs.activate(previous);
+    this.tabs.add(
+      {
+        id,
+        title: baseName(path),
+        tooltip: path,
+        kind: 'file',
+        pane,
+        onActivate: () => viewer.view.focus(),
+        onClose: () => this.close(id),
+      },
+      { activate: focus },
+    );
   }
 
   private close(id: string) {
     this.viewers.get(id)?.view.destroy();
     this.viewers.delete(id);
     this.tabs.remove(id);
+  }
+
+  /** Destroys every editor (used by Vite HMR). */
+  dispose(): void {
+    for (const v of this.viewers.values()) v.view.destroy();
+    this.viewers.clear();
   }
 }

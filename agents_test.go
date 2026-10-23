@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leeyounagh/work-dashboard/internal/bridge"
+	"github.com/leeyounagh/work-dashboard/internal/term"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
@@ -138,5 +139,65 @@ func TestFileAPIIsGuarded(t *testing.T) {
 	}
 	if _, err := h.app.FileDiff(filepath.Join(outside, "x")); err == nil {
 		t.Fatal("FileDiff outside workspaces must fail")
+	}
+}
+
+func TestCleanRunDir(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a.mcp.json", "a.settings.json", "keep.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := cleanRunDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := filepath.Glob(filepath.Join(dir, "*"))
+	if len(left) != 1 || filepath.Base(left[0]) != "keep.txt" {
+		t.Fatalf("left = %v", left)
+	}
+	if err := cleanRunDir(filepath.Join(dir, "missing")); err != nil {
+		t.Fatalf("missing dir: %v", err)
+	}
+}
+
+// A Claude process that dies at once (bad flag, no auth) must not leave its
+// token files behind even if it exits before the terminal is bound.
+func TestImmediateExitCleansRunFiles(t *testing.T) {
+	h := newHarnessWith(t, func() term.Process {
+		p := &fakeProc{out: make(chan []byte), closed: make(chan struct{})}
+		_ = p.Close() // already exited
+		return p
+	})
+	dir := t.TempDir()
+	ws, err := h.app.SaveWorkspace(workspace.Workspace{Name: "dies", Folders: []string{dir}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.app.OpenClaude(ws.ID, 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		left, _ := filepath.Glob(filepath.Join(h.app.deps.RunDir, "*.json"))
+		if len(left) == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	left, _ := filepath.Glob(filepath.Join(h.app.deps.RunDir, "*.json"))
+	t.Fatalf("run files left: %v", left)
+}
+
+func TestRegistryRefusesLiveKey(t *testing.T) {
+	r := newAgentRegistry()
+	if err := r.add("k", &agentSession{workspaceID: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.add("k", &agentSession{workspaceID: "b"}); err == nil {
+		t.Fatal("a live key must not be reused")
+	}
+	if s, _ := r.get("k"); s.workspaceID != "a" {
+		t.Fatalf("existing session was replaced: %+v", s)
 	}
 }

@@ -194,6 +194,14 @@ func (m *Manager) CloseAll() {
 	}
 }
 
+// Alive reports whether a session is still running.
+func (m *Manager) Alive(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.sessions[id]
+	return ok
+}
+
 // List returns running sessions in the order they were opened.
 func (m *Manager) List() []Info {
 	m.mu.Lock()

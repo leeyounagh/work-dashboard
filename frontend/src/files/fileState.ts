@@ -11,14 +11,24 @@ export function emptyFileState(): FileState {
   return { opened: [], seen: [] };
 }
 
+/**
+ * Identity of a file path on Windows: Claude may send forward slashes, the
+ * tree sends backslashes, and the file system ignores case.
+ */
+export function pathKey(path: string): string {
+  return path.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+}
+
 export function addOpened(state: FileState, paths: string[]): FileState {
-  const fresh = [...paths].reverse();
-  const rest = state.opened.filter((p) => !paths.includes(p));
+  const keys = new Set(paths.map(pathKey));
+  const fresh = [...new Map(paths.map((p) => [pathKey(p), p])).values()].reverse();
+  const rest = state.opened.filter((p) => !keys.has(pathKey(p)));
   return { ...state, opened: [...fresh, ...rest].slice(0, MAX_OPENED) };
 }
 
 export function addSeen(state: FileState, path: string, tool: string): FileState {
-  const rest = state.seen.filter((e) => e.path !== path);
+  const key = pathKey(path);
+  const rest = state.seen.filter((e) => pathKey(e.path) !== key);
   return { ...state, seen: [{ path, tool }, ...rest].slice(0, MAX_SEEN) };
 }
 

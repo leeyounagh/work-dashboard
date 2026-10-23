@@ -49,9 +49,12 @@ export class TerminalPanel {
   private opening = false;
   private readonly listeners = new Set<(list: TerminalInfo[]) => void>();
 
+  // Late events for tabs the user already closed are dropped, not buffered.
+  private readonly closed = new Set<string>();
+
   constructor(
     private readonly tabs: TabHost,
-    body: HTMLElement,
+    private readonly body: HTMLElement,
     private readonly onError: (message: string) => void,
   ) {
     this.unsubscribe = [
@@ -79,7 +82,13 @@ export class TerminalPanel {
 
   private changed() {
     const list = this.list();
-    for (const l of this.listeners) l(list);
+    for (const l of this.listeners) {
+      try {
+        l(list);
+      } catch (err) {
+        console.error('terminal listener failed', err);
+      }
+    }
   }
 
   async open(kind: TerminalKind, workspaceId: string): Promise<void> {
@@ -89,9 +98,11 @@ export class TerminalPanel {
     pane.className = 'term-pane';
     // The pane must be in the DOM and visible for xterm to measure its size.
     pane.style.visibility = 'hidden';
-    pane.classList.add('tab-pane', 'active', 'measuring');
-    document.querySelector('#editor-body')?.append(pane);
+    pane.classList.add('tab-pane', 'active');
+    this.body.append(pane);
     let term: Terminal | undefined;
+    let session: Session;
+    let dir: string;
     try {
       term = new Terminal({
         theme: THEME,
@@ -107,17 +118,20 @@ export class TerminalPanel {
 
       const openFn = kind === 'claude' ? OpenClaude : OpenShell;
       const info = await openFn(workspaceId, term.cols, term.rows);
-      pane.style.visibility = '';
-      pane.classList.remove('measuring');
-      const session: Session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane };
-      this.register(session, info.dir);
+      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane };
+      dir = info.dir;
     } catch (err) {
       term?.dispose();
       pane.remove();
       this.onError(String(err));
+      return;
     } finally {
       this.opening = false;
     }
+    // Outside the try: the process is running now, so a UI error must not
+    // dispose its terminal and orphan it.
+    pane.style.visibility = '';
+    this.register(session, dir);
   }
 
   private register(session: Session, dir: string) {
@@ -147,12 +161,13 @@ export class TerminalPanel {
     const bytes = base64ToBytes(ev.data);
     const session = this.sessions.get(ev.id);
     if (session) session.term.write(bytes);
-    else this.early.data(ev.id, bytes);
+    else if (!this.closed.has(ev.id)) this.early.data(ev.id, bytes);
   }
 
   private handleExit(ev: TermExit) {
     const session = this.sessions.get(ev.id);
     if (session) this.markExited(session, ev);
+    else if (this.closed.delete(ev.id)) return;
     else this.early.exit(ev.id, ev);
   }
 
@@ -186,6 +201,7 @@ export class TerminalPanel {
     if (!s) return;
     this.sessions.delete(id);
     if (s.alive) {
+      this.closed.add(id); // its exit event is still to come
       try {
         await TermClose(id);
       } catch {

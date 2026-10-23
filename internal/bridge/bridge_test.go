@@ -55,7 +55,8 @@ func post(t *testing.T, s *Server, path, body string, mutate func(*http.Request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.Token())
+	session := path[strings.LastIndex(path, "/")+1:]
+	req.Header.Set("Authorization", "Bearer "+s.SessionToken(session))
 	req.Header.Set("Content-Type", "application/json")
 	if mutate != nil {
 		mutate(req)
@@ -202,7 +203,7 @@ func TestMCPErrors(t *testing.T) {
 func TestMCPGetIsNotAllowed(t *testing.T) {
 	s, _ := start(t)
 	req, _ := http.NewRequest(http.MethodGet, s.URL()+"/mcp/sess-1", nil)
-	req.Header.Set("Authorization", "Bearer "+s.Token())
+	req.Header.Set("Authorization", "Bearer "+s.SessionToken("sess-1"))
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -224,12 +225,38 @@ func TestClaudeFiles(t *testing.T) {
 	if srv["type"] != "http" || srv["url"] != s.URL()+"/mcp/sess-9" {
 		t.Fatalf("mcp config = %s", mcp)
 	}
-	if !bytes.Contains(settings, []byte(s.URL()+"/hook/sess-9")) || !bytes.Contains(settings, []byte("Bearer "+s.Token())) {
+	if !bytes.Contains(settings, []byte(s.URL()+"/hook/sess-9")) || !bytes.Contains(settings, []byte("Bearer "+s.SessionToken("sess-9"))) {
 		t.Fatalf("settings = %s", settings)
 	}
 	for _, ev := range []string{"PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "Notification"} {
 		if !bytes.Contains(settings, []byte(`"`+ev+`"`)) {
 			t.Errorf("settings missing %s hook", ev)
+		}
+	}
+}
+
+func TestTokenIsBoundToSession(t *testing.T) {
+	s, rec := start(t)
+	if s.SessionToken("a") == s.SessionToken("b") {
+		t.Fatal("sessions must get different tokens")
+	}
+	res := post(t, s, "/hook/b", `{"hook_event_name":"Stop"}`, func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+s.SessionToken("a"))
+	})
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 for another session's token", res.StatusCode)
+	}
+	if len(rec.hooks) != 0 {
+		t.Fatal("must not reach the handler")
+	}
+}
+
+func TestInitializeNegotiatesKnownVersions(t *testing.T) {
+	s, _ := start(t)
+	for in, want := range map[string]string{"2025-03-26": "2025-03-26", "2099-01-01": defaultProtoVersion} {
+		out := rpc(t, s, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"`+in+`"}}`)
+		if got := out["result"].(map[string]any)["protocolVersion"]; got != want {
+			t.Errorf("client %s: server answered %v, want %s", in, got, want)
 		}
 	}
 }

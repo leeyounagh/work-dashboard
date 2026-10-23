@@ -17,12 +17,14 @@ interface Tab {
 
 export class TabHost {
   private readonly tabs = new Map<string, Tab>();
+  private recent: string[] = []; // most recently used first
   private active: string | null = null;
 
   constructor(
     private readonly strip: HTMLElement,
     private readonly body: HTMLElement,
-    private readonly onEmpty: () => void = () => {},
+    /** Called with the active tab id (null when none are left) after every change. */
+    private readonly onChange: (activeId: string | null) => void = () => {},
   ) {}
 
   has(id: string): boolean {
@@ -33,7 +35,12 @@ export class TabHost {
     return this.active;
   }
 
-  add(opts: TabOptions): void {
+  /** Adds a tab; it becomes active unless `activate` is false and another tab is active. */
+  add(opts: TabOptions, { activate = true } = {}): void {
+    if (this.tabs.has(opts.id)) {
+      if (activate) this.activate(opts.id);
+      return;
+    }
     const el = document.createElement('div');
     el.className = `term-tab kind-${opts.kind}`;
     el.setAttribute('role', 'tab');
@@ -55,15 +62,18 @@ export class TabHost {
 
     el.append(label, close);
     opts.pane.classList.add('tab-pane');
+    opts.pane.classList.remove('active');
     this.strip.append(el);
     this.body.append(opts.pane);
     this.tabs.set(opts.id, { opts, el, label });
-    this.activate(opts.id);
+    if (activate || this.active === null) this.activate(opts.id);
+    else this.onChange(this.active);
   }
 
   activate(id: string): void {
     if (!this.tabs.has(id)) return;
     this.active = id;
+    this.recent = [id, ...this.recent.filter((r) => r !== id)];
     for (const [tid, t] of this.tabs) {
       const on = tid === id;
       t.opts.pane.classList.toggle('active', on);
@@ -71,15 +81,11 @@ export class TabHost {
       t.el.setAttribute('aria-selected', String(on));
     }
     this.tabs.get(id)?.opts.onActivate?.();
+    this.onChange(id);
   }
 
   mark(id: string, className: string, on = true): void {
     this.tabs.get(id)?.el.classList.toggle(className, on);
-  }
-
-  setTitle(id: string, title: string): void {
-    const t = this.tabs.get(id);
-    if (t) t.label.textContent = title;
   }
 
   remove(id: string): void {
@@ -88,11 +94,14 @@ export class TabHost {
     t.el.remove();
     t.opts.pane.remove();
     this.tabs.delete(id);
-    if (this.active === id) {
-      this.active = null;
-      const next = [...this.tabs.keys()].at(-1);
-      if (next) this.activate(next);
-      else this.onEmpty();
+    this.recent = this.recent.filter((r) => r !== id);
+    if (this.active !== id) {
+      this.onChange(this.active);
+      return;
     }
+    this.active = null;
+    const next = this.recent[0];
+    if (next) this.activate(next);
+    else this.onChange(null);
   }
 }
