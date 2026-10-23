@@ -1,7 +1,6 @@
 # build output
 build/bin
-frontend/dist/*
-!frontend/dist/.gitkeep
+frontend/dist/
 node_modules
 
 # local-only config & secrets (never commit)
@@ -14,3 +13,4 @@ node_modules
 .idea/
 .DS_Store
 Thumbs.db
+frontend/package.json.md5

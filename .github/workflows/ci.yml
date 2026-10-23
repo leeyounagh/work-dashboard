@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, test]
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # The root package embeds frontend/dist and links WebView, so CI checks
+      # the platform-independent packages; the full app is built on Windows below.
+      - run: go vet ./internal/...
+      - run: go test -race -cover ./internal/...
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  windows-build:
+    runs-on: windows-latest
+    needs: [go, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+      # Build first: main.go embeds frontend/dist, which only exists after the frontend build.
+      - run: wails build -clean -ldflags "-s -w -X main.Version=${{ github.sha }}"
+      - run: go test ./...
+      - name: Report binary size
+        shell: bash
+        run: ls -la build/bin/

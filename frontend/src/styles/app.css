@@ -1,0 +1,81 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 var(--font);
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 240px 1fr 320px;
+  grid-template-rows: 1fr 240px;
+  grid-template-areas:
+    'side floor widgets'
+    'side terminal widgets';
+  gap: var(--gap);
+  height: 100vh;
+  padding: var(--gap);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: auto;
+  min-height: 0;
+}
+
+.panel > h2 {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.side { grid-area: side; }
+.floor { grid-area: floor; position: relative; overflow: hidden; }
+.terminal { grid-area: terminal; font-family: var(--font-mono); }
+.widgets { grid-area: widgets; }
+
+.floor canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.list li {
+  padding: 4px 12px;
+}
+
+.list .group {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.muted {
+  color: var(--text-muted);
+  padding: 8px 12px;
+}
+
+.error {
+  color: var(--danger);
+  padding: 8px 12px;
+}
