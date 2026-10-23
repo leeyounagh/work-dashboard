@@ -3,27 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://localhost:*" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'" />
   <title>work-dashboard</title>
 </head>
 <body>
   <div id="app">
-    <section class="panel side">
+    <section class="panel side" aria-label="워크스페이스">
       <h2>Workspaces</h2>
-      <ul class="list" id="workspaces"></ul>
+      <div id="ws-list"></div>
+      <div id="ws-editor"></div>
     </section>
-    <section class="panel floor">
+    <section class="panel floor" aria-label="사무실">
       <canvas id="floor"></canvas>
     </section>
-    <section class="panel terminal">
-      <h2>Terminal</h2>
-      <p class="muted">터미널은 1단계에서 연결됩니다.</p>
+    <section class="panel terminal" aria-label="터미널">
+      <header class="term-bar">
+        <div id="term-tabs" class="term-tabs"></div>
+        <div class="term-actions">
+          <button type="button" class="ghost" data-open="claude">+ Claude</button>
+          <button type="button" class="ghost" data-open="shell">+ 셸</button>
+        </div>
+      </header>
+      <div id="term-body" class="term-body"></div>
     </section>
-    <section class="panel widgets">
+    <section class="panel widgets" aria-label="위젯">
       <h2>Widgets</h2>
       <ul class="list" id="catalog"></ul>
     </section>
   </div>
+  <div id="toast" role="status"></div>
   <script src="./src/main.ts" type="module"></script>
 </body>
 </html>

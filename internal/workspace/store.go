@@ -10,7 +10,15 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/leeyounagh/work-dashboard/internal/fsutil"
 )
+
+// ErrNotFound is returned when no workspace has the requested ID.
+var ErrNotFound = errors.New("workspace not found")
+
+// ErrExists is returned by Create when the ID is already taken.
+var ErrExists = errors.New("workspace already exists")
 
 // Store reads and writes workspaces as <dir>/<id>.json.
 type Store struct {
@@ -83,8 +91,17 @@ func (s *Store) load(name string) (Workspace, error) {
 	return ws, nil
 }
 
-// Save validates and writes the workspace atomically.
+// Create saves a new workspace, refusing to overwrite an existing one.
+func (s *Store) Create(ws Workspace) error {
+	return s.write(ws, true)
+}
+
+// Save validates and writes the workspace atomically, replacing any existing one.
 func (s *Store) Save(ws Workspace) error {
+	return s.write(ws, false)
+}
+
+func (s *Store) write(ws Workspace, createOnly bool) error {
 	if err := ws.Validate(); err != nil {
 		return fmt.Errorf("save workspace: %w", err)
 	}
@@ -99,35 +116,51 @@ func (s *Store) Save(ws Workspace) error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("create workspace dir: %w", err)
 	}
-	if err := writeFileAtomic(filepath.Join(s.dir, ws.ID+".json"), data); err != nil {
+	target := filepath.Join(s.dir, ws.ID+".json")
+	if createOnly {
+		// Checked under s.mu, so two concurrent creates cannot both pass.
+		if _, err := os.Stat(target); err == nil {
+			return fmt.Errorf("%w: %s", ErrExists, ws.ID)
+		}
+	}
+	if err := fsutil.WriteFileAtomic(target, data); err != nil {
 		return fmt.Errorf("write workspace %s: %w", ws.ID, err)
 	}
 	return nil
 }
 
-// writeFileAtomic writes to a unique temp file, syncs it, then renames it over
-// target, so a crash never leaves a truncated target behind.
-func writeFileAtomic(target string, data []byte) (err error) {
-	f, err := os.CreateTemp(filepath.Dir(target), filepath.Base(target)+".*.tmp")
+func checkID(id string) error {
+	if !idPattern.MatchString(id) || reservedID.MatchString(id) {
+		return fmt.Errorf("invalid workspace id %q", id)
+	}
+	return nil
+}
+
+// Get loads one workspace by ID.
+func (s *Store) Get(id string) (Workspace, error) {
+	if err := checkID(id); err != nil {
+		return Workspace{}, err
+	}
+	ws, err := s.load(id + ".json")
+	if errors.Is(err, fs.ErrNotExist) {
+		return Workspace{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	return ws, err
+}
+
+// Delete removes a workspace file.
+func (s *Store) Delete(id string) error {
+	if err := checkID(id); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := os.Remove(filepath.Join(s.dir, id+".json"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("delete workspace %s: %w", id, err)
 	}
-	tmp := f.Name()
-	defer func() {
-		if err != nil {
-			_ = os.Remove(tmp)
-		}
-	}()
-	if _, err = f.Write(data); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, target)
+	return nil
 }

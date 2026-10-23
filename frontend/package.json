@@ -13,5 +13,9 @@
     "typescript": "5.9.3",
     "vite": "8.3.5",
     "vitest": "5.0.5"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0"
   }
 }

@@ -14,7 +14,7 @@ body {
 #app {
   display: grid;
   grid-template-columns: 240px 1fr 320px;
-  grid-template-rows: 1fr 240px;
+  grid-template-rows: minmax(140px, 28%) 1fr;
   grid-template-areas:
     'side floor widgets'
     'side terminal widgets';
@@ -44,7 +44,7 @@ body {
 
 .side { grid-area: side; }
 .floor { grid-area: floor; position: relative; overflow: hidden; }
-.terminal { grid-area: terminal; font-family: var(--font-mono); }
+.terminal { grid-area: terminal; display: flex; flex-direction: column; overflow: hidden; }
 .widgets { grid-area: widgets; }
 
 .floor canvas {
@@ -79,3 +79,102 @@ body {
   color: var(--danger);
   padding: 8px 12px;
 }
+
+/* Controls */
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--text-muted); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.ghost { background: transparent; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #111; }
+button.danger { color: var(--danger); background: transparent; }
+button.icon { padding: 0 6px; background: transparent; border: none; color: var(--text-muted); }
+
+.field {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+}
+.field:focus { outline: none; border-color: var(--accent); }
+textarea.field { resize: vertical; }
+
+/* Workspaces */
+#ws-list { padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+#ws-list > button { margin: 0 12px; }
+.list li.ws-row { padding: 0; }
+.ws-item {
+  width: 100%;
+  text-align: left;
+  padding: 4px 12px;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+}
+.ws-item:hover { background: var(--panel-raised); }
+.ws-item.selected { background: var(--panel-raised); border-left-color: var(--accent); }
+.ws-editor { display: flex; flex-direction: column; gap: 6px; padding: 12px; }
+.ws-editor .label { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.folders { list-style: none; margin: 0; padding: 0; }
+.folder { display: flex; align-items: center; justify-content: space-between; padding: 2px 0; }
+.folder-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Terminal */
+.term-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.term-tabs { display: flex; gap: 4px; overflow-x: auto; }
+.term-tab {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding-left: 8px;
+}
+.term-tab-label, .term-tab-close { background: transparent; border: none; padding: 4px 6px; }
+.term-tab.active { background: var(--panel-raised); border-color: var(--text-muted); }
+.term-tab.kind-claude::before { content: '●'; color: var(--accent); font-size: 9px; }
+.term-tab.kind-shell::before { content: '●'; color: var(--text-muted); font-size: 9px; }
+.term-tab.exited { opacity: 0.5; }
+.term-tab-close { color: var(--text-muted); }
+.term-tab-close:hover { color: var(--danger); }
+.term-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.term-body { position: relative; flex: 1; min-height: 0; background: var(--bg); }
+.term-pane { position: absolute; inset: 4px 0 0 8px; display: none; }
+.term-pane.active { display: block; }
+
+/* Toast */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  max-width: 70vw;
+  padding: 8px 14px;
+  background: var(--panel-raised);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+#toast.show { opacity: 1; }

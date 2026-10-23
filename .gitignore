@@ -14,3 +14,4 @@ node_modules
 .DS_Store
 Thumbs.db
 frontend/package.json.md5
+*.syso

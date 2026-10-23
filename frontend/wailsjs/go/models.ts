@@ -15,6 +15,29 @@ export namespace main {
 
 }
 
+export namespace term {
+	
+	export class Info {
+	    id: string;
+	    title: string;
+	    dir: string;
+	    kind: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.dir = source["dir"];
+	        this.kind = source["kind"];
+	    }
+	}
+
+}
+
 export namespace widget {
 	
 	export class SettingSpec {

@@ -31,8 +31,8 @@ type Workspace struct {
 
 // Validate checks the workspace and every widget instance in it.
 func (w Workspace) Validate() error {
-	if !idPattern.MatchString(w.ID) || reservedID.MatchString(w.ID) {
-		return fmt.Errorf("invalid workspace id %q: use lowercase letters, digits and dashes", w.ID)
+	if err := checkID(w.ID); err != nil {
+		return fmt.Errorf("%w: use lowercase letters, digits and dashes", err)
 	}
 	if strings.TrimSpace(w.Name) == "" {
 		return fmt.Errorf("workspace %s: name is required", w.ID)
@@ -41,6 +41,11 @@ func (w Workspace) Validate() error {
 	for _, folder := range w.Folders {
 		if !filepath.IsAbs(folder) {
 			return fmt.Errorf("workspace %s: folder %q must be an absolute path", w.ID, folder)
+		}
+		// Network and device paths would make Windows contact another host
+		// (leaking NTLM credentials) when a terminal starts there.
+		if strings.HasPrefix(folder, `\\`) || strings.HasPrefix(folder, "//") {
+			return fmt.Errorf("workspace %s: folder %q must be a local path", w.ID, folder)
 		}
 		key := folderKey(folder)
 		if seen[key] {

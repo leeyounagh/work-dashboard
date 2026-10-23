@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,5 +225,99 @@ func TestListIgnoresNonJSONAndDirs(t *testing.T) {
 	}
 	if res := store.List(); len(res.Workspaces) != 0 || len(res.Problems) != 0 {
 		t.Fatalf("List() = %+v, want empty", res)
+	}
+}
+
+func TestStoreGetAndDelete(t *testing.T) {
+	store := NewStore(t.TempDir())
+	ws := validWorkspace(t)
+	if err := store.Save(ws); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Get(ws.ID)
+	if err != nil || got.Name != ws.Name {
+		t.Fatalf("Get() = %+v, %v", got, err)
+	}
+	if err := store.Delete(ws.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get(ws.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Get after delete: err = %v, want ErrNotFound", err)
+	}
+	if err := store.Delete(ws.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second Delete: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestStoreRejectsUnsafeIDs(t *testing.T) {
+	store := NewStore(t.TempDir())
+	for _, id := range []string{"../x", "", "A", "nul"} {
+		if _, err := store.Get(id); err == nil || errors.Is(err, ErrNotFound) {
+			t.Errorf("Get(%q): err = %v, want invalid id", id, err)
+		}
+		if err := store.Delete(id); err == nil || errors.Is(err, ErrNotFound) {
+			t.Errorf("Delete(%q): err = %v, want invalid id", id, err)
+		}
+	}
+}
+
+func TestNewID(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing []string
+		want     string
+	}{
+		{name: "Acme FE", want: "acme-fe"},
+		{name: "  my   work!! ", want: "my-work"},
+		{name: "work", existing: []string{"work"}, want: "work-2"},
+		{name: "work", existing: []string{"work", "work-2"}, want: "work-3"},
+	}
+	for _, tt := range tests {
+		if got := NewID(tt.name, tt.existing); got != tt.want {
+			t.Errorf("NewID(%q, %v) = %q, want %q", tt.name, tt.existing, got, tt.want)
+		}
+	}
+	// Names without ASCII letters (e.g. Korean) still get a valid, unique id.
+	id := NewID("그룹웨어", nil)
+	if !idPattern.MatchString(id) || !strings.HasPrefix(id, "ws-") {
+		t.Errorf("NewID(korean) = %q", id)
+	}
+	if NewID("그룹웨어", nil) == id {
+		t.Error("ids for non-ASCII names should be random")
+	}
+	if got := NewID("con", nil); reservedID.MatchString(got) {
+		t.Errorf("NewID(con) = %q, must not be reserved", got)
+	}
+}
+
+func TestValidateRejectsNetworkPaths(t *testing.T) {
+	ws := validWorkspace(t)
+	for _, f := range []string{`\attacker\share`, `\?\C:\x`, `//host/share`} {
+		ws.Folders = []string{f}
+		if err := ws.Validate(); err == nil {
+			t.Errorf("folder %q should be rejected", f)
+		}
+	}
+}
+
+func TestStoreCreateRefusesExisting(t *testing.T) {
+	store := NewStore(t.TempDir())
+	ws := validWorkspace(t)
+	if err := store.Create(ws); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Create(ws); !errors.Is(err, ErrExists) {
+		t.Fatalf("second Create: err = %v, want ErrExists", err)
+	}
+}
+
+func TestNewIDAvoidsExistingRandomIDs(t *testing.T) {
+	// With every 6-hex suffix but one taken this would loop for a long time,
+	// so just check a taken random id is never returned.
+	first := NewID("그룹웨어", nil)
+	for range 50 {
+		if NewID("그룹웨어", []string{first}) == first {
+			t.Fatal("NewID returned an existing id")
+		}
 	}
 }

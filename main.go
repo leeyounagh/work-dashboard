@@ -1,14 +1,21 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
 
+	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/leeyounagh/work-dashboard/internal/term"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
@@ -19,12 +26,32 @@ var assets embed.FS
 // window does not flash a different colour before the page paints.
 var windowBackground = &options.RGBA{R: 0x1e, G: 0x1f, B: 0x22, A: 0xff}
 
+// preferredShell returns PowerShell 7 when installed, else Windows PowerShell.
+func preferredShell() string {
+	if _, err := exec.LookPath("pwsh"); err == nil {
+		return "pwsh"
+	}
+	return "powershell.exe"
+}
+
 func main() {
 	dir, err := workspace.DefaultDir()
 	if err != nil {
 		log.Fatalf("work-dashboard: %v", err)
 	}
-	app := NewApp(workspace.NewStore(dir))
+	app := NewApp(Deps{
+		Workspaces:   workspace.NewStore(dir),
+		Start:        term.StartPTY,
+		Emit:         func(ctx context.Context, name string, data any) { runtime.EventsEmit(ctx, name, data) },
+		FindClaude:   func() (string, error) { return exec.LookPath("claude") },
+		Shell:        preferredShell(),
+		NotesDir:     filepath.Join(filepath.Dir(dir), "notes"),
+		NewSessionID: func() string { return uuid.NewString() },
+		PickFolder: func(ctx context.Context) (string, error) {
+			return runtime.OpenDirectoryDialog(ctx, runtime.OpenDialogOptions{Title: "워크스페이스에 추가할 폴더"})
+		},
+		TerminalsLocked: devBuild && os.Getenv("WD_DEV_TERMINALS") != "1",
+	})
 
 	err = wails.Run(&options.App{
 		Title:            "work-dashboard",
@@ -36,6 +63,7 @@ func main() {
 		BackgroundColour: windowBackground,
 		Windows:          &windows.Options{Theme: windows.Dark},
 		OnStartup:        app.startup,
+		OnShutdown:       app.shutdown,
 		Bind:             []any{app},
 	})
 	if err != nil {
