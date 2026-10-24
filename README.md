@@ -134,7 +134,7 @@ the same executable.
 │ UI: WebView2 (Windows' Edge engine) + TS       │
 │   ↕ calls · events (Wails)                     │
 │ Go: terminals (ConPTY) · files · gh/git/claude │
-│     · 127.0.0.1 bridge (Claude hooks, open_files)│
+│     · 127.0.0.1 bridge (hooks, open_files)     │
 └────────────────────────────────────────────────┘
    settings → ~/.work-dashboard/   outside → gh · claude
 ```
