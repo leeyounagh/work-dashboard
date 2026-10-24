@@ -300,7 +300,9 @@ func TestDeleteWorkspaceRemovesNotes(t *testing.T) {
 func TestSaveWorkspaceCleansFolders(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()
-	saved, err := h.app.SaveWorkspace(workspace.Workspace{Name: "c", Folders: []string{dir + `\sub\..\`}})
+	// "<dir>/sub/../" with this OS's separator: saving cleans it to <dir>.
+	sep := string(filepath.Separator)
+	saved, err := h.app.SaveWorkspace(workspace.Workspace{Name: "c", Folders: []string{dir + sep + "sub" + sep + ".." + sep}})
 	if err != nil {
 		t.Fatal(err)
 	}
