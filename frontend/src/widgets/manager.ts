@@ -137,7 +137,7 @@ function addRows(ws: Workspace, { catalog, saveWidgets, toast }: ManagerDeps): H
   return catalog
     .filter((d) => d.multiple)
     .map((def) => {
-      const row = h('div', 'w-manage-row');
+      const row = h('div', 'w-manage-row w-add-row'); // button or name field on top, description below
       const add = h('button', 'ghost small-btn', '추가');
       add.type = 'button';
       add.addEventListener('click', () => {

@@ -325,3 +325,7 @@ body.resizing-col .tab-pane, body.resizing-row .tab-pane, body.resizing-col canv
 .todo-item.done .todo-text { color: var(--text-muted); text-decoration: line-through; }
 .todo-delete { padding: 0 6px; visibility: hidden; }
 .todo-item:hover .todo-delete, .todo-delete:focus-visible { visibility: visible; }
+/* + 위젯 추가: the button (or the name field) on top, the description under it. */
+.w-add-row { flex-direction: column; align-items: stretch; gap: 4px; cursor: default; }
+.w-add-row > button { align-self: flex-start; }
+.w-add-row .w-inline-add { min-width: 0; }
