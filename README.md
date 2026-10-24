@@ -36,6 +36,27 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
   기술 블로그를 엽니다. 사이드바의 「가이드 주제」 로 직접 정할 수 있고, 찾지 못하면 AI 관련 사이트를 엽니다.
 - **화면 확대** — Ctrl + / Ctrl − / Ctrl 0, 패널 폭은 드래그로 조절합니다.
 
+### 구동 원리
+
+브라우저 화면을 품은 Windows 프로그램 하나입니다. 화면은 웹 기술(TypeScript)로 그리고, 실제 일은 같은 exe 안의 Go 코드가 합니다.
+
+```
+┌────────────── work-dashboard.exe ──────────────┐
+│ 화면: WebView2(Windows 내장 Edge 엔진) + TS    │
+│   ↕ 함수 호출 · 이벤트 (Wails)                 │
+│ Go: 터미널(ConPTY) · 파일 · gh/git/claude 실행 │
+│     · 127.0.0.1 브리지(Claude 훅 · open_files) │
+└────────────────────────────────────────────────┘
+   설정 → ~/.work-dashboard/      외부 → gh · claude
+```
+
+- **터미널** — Go 가 Windows 가상 콘솔(ConPTY)로 `claude --add-dir … --session-id …` 를 실행하고, 출력은 xterm.js 화면으로 보냅니다.
+- **사무실** — Claude 를 띄울 때 훅을 이 PC 의 작은 서버(127.0.0.1, 세션별 토큰)로 보내도록 설정해 두고,
+  도구 사용 · 대기 · 완료 신호에 맞춰 캐릭터를 움직입니다. 「코드 열어줘」 는 같은 서버의 `open_files` MCP 도구로 파일 트리에 열립니다.
+- **위젯** — 화면이 3분마다 Go 에 데이터를 요청하면, Go 가 `gh`(PR) · `git`(워크트리) · 파일(문서) ·
+  `claude -p`(리니어 · 노션, 기본 도구 없이 읽기 전용 커넥터 도구만)로 가져옵니다.
+- **저장 · 통신** — 설정은 각자 PC 의 JSON 파일이고 서버 · 계정 · 토큰 저장이 없습니다. 바깥 통신은 사용자가 로그인해 둔 `gh` 와 `claude` 를 빌려 쓰는 것뿐입니다.
+
 ### 필요한 것
 
 - Windows 10/11 (WebView2 런타임은 Windows 11 에 기본 포함)
@@ -102,6 +123,29 @@ a single Windows executable (~13 MB, Wails + the system WebView2) instead of an 
   for a tech blog matching the workspace (detected from go.mod, package.json, pubspec.yaml, …, or set by the workspace's
   guide topics), or an AI site when nothing matches.
 - **Zoom** — Ctrl + / Ctrl − / Ctrl 0; drag the panel edges to resize.
+
+### How it works
+
+One Windows program with a browser view inside: the UI is web tech (TypeScript), the real work is done by Go code in
+the same executable.
+
+```
+┌────────────── work-dashboard.exe ──────────────┐
+│ UI: WebView2 (Windows' Edge engine) + TS       │
+│   ↕ calls · events (Wails)                     │
+│ Go: terminals (ConPTY) · files · gh/git/claude │
+│     · 127.0.0.1 bridge (Claude hooks, open_files)│
+└────────────────────────────────────────────────┘
+   settings → ~/.work-dashboard/   outside → gh · claude
+```
+
+- **Terminals** — Go runs `claude --add-dir … --session-id …` in a Windows pseudo console (ConPTY) and streams it to xterm.js.
+- **Office** — Claude is started with hooks that post to a small local server (127.0.0.1, per-session tokens); tool
+  use, waiting and done move the characters. "Open that code" goes through the same server's `open_files` MCP tool.
+- **Widgets** — every 3 minutes the UI asks Go, which reads `gh` (PRs), `git` (worktrees), files (documents) or
+  `claude -p` (Linear, Notion — no built-in tools, read-only connector tools only).
+- **Storage & network** — settings are JSON files on your own PC; no server, account or stored tokens. The only outside
+  traffic is the `gh` and `claude` you are already logged into.
 
 ### Requirements
 
