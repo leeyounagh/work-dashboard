@@ -1,6 +1,7 @@
 import { EditorState, type Extension } from '@codemirror/state';
-import { EditorView, lineNumbers, highlightActiveLine, drawSelection } from '@codemirror/view';
+import { EditorView, lineNumbers, highlightActiveLine, drawSelection, keymap } from '@codemirror/view';
 import { HighlightStyle, StreamLanguage, syntaxHighlighting, foldGutter, bracketMatching } from '@codemirror/language';
+import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
 import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
@@ -48,6 +49,28 @@ const theme = EditorView.theme(
     '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#2b2d31' },
     '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: '#3a3c42 !important' },
     '.cm-cursor': { borderLeftColor: '#e3e5e8' },
+    // Ctrl+F 검색 패널 — 다크 테마에 맞춤.
+    '.cm-panels': { backgroundColor: '#2b2d31', color: '#e3e5e8' },
+    '.cm-panel.cm-search': { backgroundColor: '#2b2d31', fontSize: '12px' },
+    '.cm-panel.cm-search label': { color: '#b5b9c0' },
+    '.cm-panel.cm-search input': {
+      backgroundColor: '#1e1f22',
+      color: '#e3e5e8',
+      border: '1px solid #3a3c42',
+      borderRadius: '3px',
+      padding: '2px 5px',
+    },
+    '.cm-panel.cm-search button': {
+      backgroundColor: '#3a3c42',
+      color: '#e3e5e8',
+      border: 'none',
+      borderRadius: '3px',
+      padding: '2px 8px',
+      cursor: 'pointer',
+    },
+    '.cm-searchMatch': { backgroundColor: '#5c4a1f' },
+    '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#8a6d1f' },
+    '.cm-selectionMatch': { backgroundColor: '#2f4a33' },
   },
   { dark: true },
 );
@@ -76,6 +99,9 @@ function editor(parent: HTMLElement, text: string, lang: Language): EditorView {
         highlightActiveLine(),
         drawSelection(),
         bracketMatching(),
+        highlightSelectionMatches(),
+        search({ top: true }),
+        keymap.of(searchKeymap),
         EditorState.readOnly.of(true),
         EditorView.editable.of(false),
         theme,
