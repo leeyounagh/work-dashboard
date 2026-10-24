@@ -12,9 +12,12 @@ const COLUMN: Record<Direction, number> = { down: 0, up: 1, left: 2, right: 3 };
 export const WALK_FRAMES = 4;
 export const ACTION_ROW = 4;
 
-export function frameRect(dir: Direction, row: number): { sx: number; sy: number } {
-  return { sx: COLUMN[dir] * FRAME, sy: row * FRAME };
+export function frameRect(dir: Direction, row: number, frame = FRAME): { sx: number; sy: number } {
+  return { sx: COLUMN[dir] * frame, sy: row * frame };
 }
+
+/** Frame size of a sheet: 4 columns wide, so your own sheets may use larger frames. */
+export const frameSize = (sheetWidth: number) => (sheetWidth > 0 ? sheetWidth / 4 : FRAME);
 
 /** Which way a character faces while moving by (dx, dy). */
 export function directionFor(dx: number, dy: number): Direction {
@@ -61,7 +64,7 @@ let custom: string[] = [];
 
 /**
  * Uses the user's own sheets (data URLs from ~/.work-dashboard/characters,
- * same 4×7 layout) instead of the bundled ninjas for new characters.
+ * same 4×7 layout, any square frame size) instead of the bundled ninjas.
  */
 export function useCustomSheets(urls: string[]): void {
   custom = urls;

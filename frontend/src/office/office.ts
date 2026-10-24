@@ -1,6 +1,6 @@
 import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
 import { drawDesk, drawRoom, drawRug } from './background';
-import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, frameRect, pickSheet, sheets, type Direction } from './sprites';
+import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, frameRect, frameSize, pickSheet, sheets, type Direction } from './sprites';
 
 /** A terminal as the office sees it. */
 export interface OfficeTerminal {
@@ -310,8 +310,12 @@ export class Office {
     let row = 0;
     if (moving) row = this.tick % WALK_FRAMES;
     else if (atDesk && c.state.mood === 'working') row = this.tick % 2 ? ACTION_ROW : 0;
-    const { sx, sy } = frameRect(c.dir, row);
-    ctx.drawImage(c.sheet, sx, sy, FRAME, FRAME, x, y, SIZE, SIZE);
+    const frame = frameSize(c.sheet.naturalWidth);
+    const { sx, sy } = frameRect(c.dir, row, frame);
+    // Pixel art stays crisp; larger drawn frames (your own sheets) are smoothed when shrunk.
+    ctx.imageSmoothingEnabled = frame > FRAME;
+    ctx.drawImage(c.sheet, sx, sy, frame, frame, x, y, SIZE, SIZE);
+    ctx.imageSmoothingEnabled = false;
   }
 
   private drawCharacter(c: Character, now: number) {
