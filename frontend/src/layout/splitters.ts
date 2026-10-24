@@ -1,4 +1,5 @@
 /** Draggable dividers between the dashboard panels. Sizes persist per viewer. */
+import { currentZoom } from './zoom';
 
 export interface Sizes {
   side: number; // left column width (px)
@@ -67,7 +68,8 @@ function apply(root: HTMLElement, s: Sizes) {
   root.style.setProperty('--floor-h', `${s.floor}px`);
 }
 
-const viewport = () => ({ width: window.innerWidth, height: window.innerHeight });
+// Sizes are CSS pixels; under the UI zoom the screen holds fewer of them.
+const viewport = () => ({ width: window.innerWidth / currentZoom(), height: window.innerHeight / currentZoom() });
 
 /**
  * Wires the [data-split] gutters inside root. Drag to resize, double-click to
@@ -94,7 +96,7 @@ export function mountSplitters(root: HTMLElement): () => void {
       gutter.setPointerCapture(e.pointerId);
       document.body.classList.add(vertical ? 'resizing-row' : 'resizing-col');
       const onMove = (m: PointerEvent) => {
-        sizes = resize(start, edge, (vertical ? m.clientY : m.clientX) - origin, viewport());
+        sizes = resize(start, edge, ((vertical ? m.clientY : m.clientX) - origin) / currentZoom(), viewport());
         apply(root, sizes);
       };
       const onUp = () => {

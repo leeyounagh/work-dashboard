@@ -123,8 +123,9 @@ func main() {
 		MinHeight:        600,
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: windowBackground,
-		// Ctrl + / Ctrl - / Ctrl 0 and Ctrl+wheel zoom the whole UI (WebView2's own zoom).
-		Windows:    &windows.Options{Theme: windows.Dark, IsZoomControlEnabled: true, ZoomFactor: 1.0},
+		// WebView2's zoom stays off: Wails disables its keys anyway, and the UI
+		// zooms itself (Ctrl + / Ctrl - / Ctrl 0, frontend/src/layout/zoom.ts).
+		Windows:    &windows.Options{Theme: windows.Dark, IsZoomControlEnabled: false, ZoomFactor: 1.0},
 		OnStartup:  app.startup,
 		OnShutdown: app.shutdown,
 		SingleInstanceLock: &options.SingleInstanceLock{

@@ -1,6 +1,6 @@
 import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
 import { drawDesk, drawRoom, drawRug } from './background';
-import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, drawSize, frameRect, frameSize, pickSheet, sheets, type Direction } from './sprites';
+import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect, sheets, type Direction } from './sprites';
 
 /** A terminal as the office sees it. */
 export interface OfficeTerminal {
@@ -42,6 +42,10 @@ interface Character {
   ty: number;
   nextWander: number;
   phase: number;
+  // An idle pose from rows 5–6 of your own sheets, held until poseUntil.
+  pose: number | null;
+  poseUntil: number;
+  nextPoseAt: number;
 }
 
 const short = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
@@ -113,6 +117,9 @@ export class Office {
       ty: 0,
       nextWander: 0,
       phase: 0,
+      pose: null,
+      poseUntil: 0,
+      nextPoseAt: performance.now() + 2000,
     };
   }
 
@@ -168,6 +175,9 @@ export class Office {
         ty: this.height - 30,
         nextWander: 0,
         phase: Math.random() * Math.PI * 2,
+        pose: null,
+        poseUntil: 0,
+        nextPoseAt: performance.now() + 3000 + Math.random() * 8000,
       });
     }
   }
@@ -208,8 +218,11 @@ export class Office {
 
   private hitTest(e: MouseEvent): Character | undefined {
     const r = this.canvas.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const y = e.clientY - r.top;
+    // Under the UI zoom the box is scaled; map back to canvas (CSS) pixels.
+    const sx = r.width ? this.width / r.width : 1;
+    const sy = r.height ? this.height / r.height : 1;
+    const x = (e.clientX - r.left) * sx;
+    const y = (e.clientY - r.top) * sy;
     // Front-most (lowest) character first, matching the drawing order.
     return [...this.visible(), this.guide]
       .sort((a, b) => b.y - a.y)
@@ -233,12 +246,37 @@ export class Office {
     this.draw(t);
   }
 
+  /**
+   * Idle characters drawn from your own sheets sometimes stop and strike a
+   * random pose (rows 5–6) for a few seconds. The bundled pixel sheets use
+   * those rows for other things, so they keep walking only.
+   */
+  private updatePose(c: Character, idle: boolean, now: number) {
+    const own = c.sheet.src.startsWith('data:');
+    if (!own || !idle || c.dog) {
+      c.pose = null;
+      return;
+    }
+    if (c.pose !== null && now >= c.poseUntil) c.pose = null;
+    const standing = Math.hypot(c.tx - c.x, c.ty - c.y) <= 1;
+    if (c.pose === null && standing && now >= c.nextPoseAt) {
+      const p = nextPose(now);
+      c.pose = p.pose;
+      c.poseUntil = p.until;
+      c.nextPoseAt = p.next;
+    }
+    // Holding a pose: no wandering off until it is over.
+    if (c.pose !== null) c.nextWander = Math.max(c.nextWander, c.poseUntil);
+  }
+
   /** Busy characters go to their desk; idle ones float around the open floor. */
   private update(now: number) {
     const openTop = this.deskAreaBottom() + 30;
+    this.updatePose(this.guide, true, now);
     for (const c of this.visible()) {
       const spot = deskSpot(c.desk, this.width);
       const busy = c.state.mood !== 'idle' && c.term.alive;
+      this.updatePose(c, !busy, now);
       if (busy) {
         // On the stool in front of the desk.
         c.tx = spot.x;
@@ -320,7 +358,7 @@ export class Office {
     if (moving) row = this.tick % WALK_FRAMES;
     else if (atDesk && c.state.mood === 'working') row = this.tick % 2 ? ACTION_ROW : 0;
     const frame = frameSize(c.sheet.naturalWidth);
-    const { sx, sy } = frameRect(c.dir, row, frame);
+    const { sx, sy } = c.pose !== null && !moving ? poseRect(c.pose, frame) : frameRect(c.dir, row, frame);
     // Pixel art stays crisp; larger drawn frames (your own sheets) are smoothed when shrunk.
     ctx.imageSmoothingEnabled = frame > FRAME;
     ctx.drawImage(c.sheet, sx, sy, frame, frame, x, y, size, size);
@@ -332,7 +370,7 @@ export class Office {
     const moving = Math.hypot(c.tx - c.x, c.ty - c.y) > 1;
     const atDesk = !moving && c.state.mood !== 'idle';
     // Idle characters float gently.
-    const bob = !moving && !atDesk ? Math.round(Math.sin(now / 400 + c.phase) * 3) : 0;
+    const bob = !moving && !atDesk && c.pose === null ? Math.round(Math.sin(now / 400 + c.phase) * 3) : 0;
     const size = this.sizeOf(c);
     const x = Math.round(c.x - size / 2);
     const y = Math.round(c.y - size + bob);

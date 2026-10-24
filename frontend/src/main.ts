@@ -43,6 +43,7 @@ import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { Office } from './office/office';
 import { guardZoomKeys } from './layout/zoomKeys';
+import { currentZoom, loadZoom, setZoom, stepZoom } from './layout/zoom';
 import { markNewWorkspace } from './widgets/onboarding';
 import { useCustomSheets } from './office/sprites';
 import { mountSplitters } from './layout/splitters';
@@ -447,7 +448,14 @@ async function start() {
       : undefined,
   }));
   import.meta.hot?.dispose(() => board.destroy());
-  const stopZoomGuard = guardZoomKeys(window);
+  // Ctrl + / Ctrl - / Ctrl 0: the remembered zoom, terminals follow with their font size.
+  const onZoom = (z: number) => panel.setFontScale(z);
+  setZoom(loadZoom(), onZoom);
+  const stopZoomGuard = guardZoomKeys(window, (dir) => {
+    const next = stepZoom(currentZoom(), dir);
+    setZoom(next, onZoom);
+    toast(`화면 크기 ${Math.round(next * 100)}%`);
+  });
   import.meta.hot?.dispose(stopZoomGuard);
 
   const loadCatalog = async () => {

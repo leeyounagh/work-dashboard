@@ -1,34 +1,39 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
-import { guardZoomKeys, isZoomKey } from './zoomKeys';
+import { guardZoomKeys, zoomDirection } from './zoomKeys';
 
 const key = (init: KeyboardEventInit) => new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
 
-describe('isZoomKey', () => {
-  it('matches Ctrl with + = - 0 (main row and keypad)', () => {
-    for (const k of ['+', '=', '-', '0']) expect(isZoomKey(key({ key: k, ctrlKey: true }))).toBe(true);
-    for (const code of ['NumpadAdd', 'NumpadSubtract', 'Numpad0']) expect(isZoomKey(key({ key: 'x', code, ctrlKey: true }))).toBe(true);
-    expect(isZoomKey(key({ key: '-' }))).toBe(false);
-    expect(isZoomKey(key({ key: 'c', ctrlKey: true }))).toBe(false);
-    expect(isZoomKey(key({ key: '-', ctrlKey: true, altKey: true }))).toBe(false);
+describe('zoomDirection', () => {
+  it('reads Ctrl with + = - 0 (main row and keypad)', () => {
+    expect(zoomDirection(key({ key: '+', ctrlKey: true }))).toBe(1);
+    expect(zoomDirection(key({ key: '=', ctrlKey: true }))).toBe(1);
+    expect(zoomDirection(key({ key: '-', ctrlKey: true }))).toBe(-1);
+    expect(zoomDirection(key({ key: '0', ctrlKey: true }))).toBe(0);
+    expect(zoomDirection(key({ key: 'x', code: 'NumpadAdd', ctrlKey: true }))).toBe(1);
+    expect(zoomDirection(key({ key: '-' }))).toBeUndefined();
+    expect(zoomDirection(key({ key: 'c', ctrlKey: true }))).toBeUndefined();
+    expect(zoomDirection(key({ key: '-', ctrlKey: true, altKey: true }))).toBeUndefined();
   });
 });
 
 describe('guardZoomKeys', () => {
-  it('keeps zoom keys from the terminal but leaves the browser default (zoom) alone', () => {
-    const off = guardZoomKeys(window);
+  it('zooms before the terminal sees the key, other keys pass', () => {
+    const onZoom = vi.fn();
+    const off = guardZoomKeys(window, onZoom);
     const input = document.createElement('textarea');
     document.body.append(input);
     const inner = vi.fn();
     input.addEventListener('keydown', inner);
     const zoom = key({ key: '-', ctrlKey: true });
     input.dispatchEvent(zoom);
+    expect(onZoom).toHaveBeenCalledWith(-1);
     expect(inner).not.toHaveBeenCalled();
-    expect(zoom.defaultPrevented).toBe(false);
+    expect(zoom.defaultPrevented).toBe(true);
     input.dispatchEvent(key({ key: 'c', ctrlKey: true }));
     expect(inner).toHaveBeenCalledTimes(1);
     off();
     input.dispatchEvent(key({ key: '-', ctrlKey: true }));
-    expect(inner).toHaveBeenCalledTimes(2);
+    expect(onZoom).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME, directionFor, drawSize, frameRect, frameSize, hash, pickSheet } from './sprites';
+import { FRAME, directionFor, drawSize, frameRect, frameSize, hash, nextPose, pickSheet, poseRect } from './sprites';
 
 describe('frameRect', () => {
   it('maps direction to column and frame to row on a 4×7 sheet of 16px frames', () => {
@@ -11,6 +11,23 @@ describe('frameRect', () => {
 
   it('works on larger frames for your own sheets', () => {
     expect(frameRect('left', 4, 128)).toEqual({ sx: 256, sy: 512 });
+  });
+});
+
+describe('idle poses', () => {
+  it('maps pose 0–7 to the cells of rows 5 and 6', () => {
+    expect(poseRect(0, 128)).toEqual({ sx: 0, sy: 640 });
+    expect(poseRect(3, 128)).toEqual({ sx: 384, sy: 640 });
+    expect(poseRect(4, 128)).toEqual({ sx: 0, sy: 768 });
+    expect(poseRect(7, 16)).toEqual({ sx: 48, sy: 96 });
+  });
+
+  it('holds a random pose for a few seconds, then waits before the next', () => {
+    const p = nextPose(1000, () => 0.99);
+    expect(p.pose).toBe(7);
+    expect(p.until).toBeGreaterThan(1000 + 2000);
+    expect(p.next).toBeGreaterThan(p.until + 3000);
+    expect(nextPose(0, () => 0).pose).toBe(0);
   });
 });
 

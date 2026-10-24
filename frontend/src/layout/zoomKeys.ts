@@ -1,22 +1,26 @@
 /**
- * The whole UI zooms with Ctrl + / Ctrl - / Ctrl 0 (WebView2's own zoom,
- * enabled in main.go). A focused terminal would take those keys (Ctrl - is a
- * control character) and block the zoom, so they are stopped before any
- * element sees them, without preventing the browser's default.
+ * Ctrl + / Ctrl - / Ctrl 0 zoom the UI (see zoom.ts). The keys are caught on
+ * the window before any element, so a focused terminal (where Ctrl - is a
+ * control character) cannot swallow them.
  */
 
-const ZOOM_KEYS = new Set(['+', '=', '-', '0']);
-const ZOOM_CODES = new Set(['NumpadAdd', 'NumpadSubtract', 'Numpad0']);
+const KEYS: Record<string, 1 | -1 | 0> = { '+': 1, '=': 1, '-': -1, '0': 0 };
+const CODES: Record<string, 1 | -1 | 0> = { NumpadAdd: 1, NumpadSubtract: -1, Numpad0: 0 };
 
-export function isZoomKey(e: KeyboardEvent): boolean {
-  if (!e.ctrlKey || e.altKey || e.metaKey) return false;
-  return ZOOM_KEYS.has(e.key) || ZOOM_CODES.has(e.code);
+/** 1 = zoom in, -1 = out, 0 = reset; undefined when it is not a zoom key. */
+export function zoomDirection(e: KeyboardEvent): 1 | -1 | 0 | undefined {
+  if (!e.ctrlKey || e.altKey || e.metaKey) return undefined;
+  return CODES[e.code] ?? KEYS[e.key];
 }
 
 /** Listens on the window in the capture phase; returns a function that stops it. */
-export function guardZoomKeys(target: Window): () => void {
+export function guardZoomKeys(target: Window, onZoom: (dir: 1 | -1 | 0) => void): () => void {
   const onKey = (e: KeyboardEvent) => {
-    if (isZoomKey(e)) e.stopPropagation();
+    const dir = zoomDirection(e);
+    if (dir === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onZoom(dir);
   };
   target.addEventListener('keydown', onKey, true);
   return () => target.removeEventListener('keydown', onKey, true);

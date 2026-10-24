@@ -312,3 +312,6 @@ body.resizing-col .tab-pane, body.resizing-row .tab-pane, body.resizing-col canv
 .w-welcome { border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; margin-bottom: var(--gap); background: var(--panel-raised); display: flex; flex-direction: column; gap: 6px; }
 .w-welcome p { margin: 0; }
 .w-setup { margin: 0; }
+/* Terminals undo the UI zoom (xterm maps the mouse wrongly under CSS zoom);
+   their font size follows the zoom instead. */
+.term-pane { zoom: calc(1 / var(--ui-zoom, 1)); }

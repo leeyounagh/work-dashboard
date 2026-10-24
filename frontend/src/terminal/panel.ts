@@ -39,6 +39,8 @@ const THEME = {
   selectionBackground: '#3a3c4280',
 };
 
+const BASE_FONT = 13;
+
 // Strip C0 control characters so an error string cannot inject escape sequences.
 // eslint-disable-next-line no-control-regex
 const stripControl = (s: string) => s.replace(/[\x00-\x1f\x7f]/g, ' ');
@@ -52,6 +54,7 @@ export class TerminalPanel {
   private queue: Promise<void> = Promise.resolve();
   private readonly listeners = new Set<(list: TerminalInfo[]) => void>();
   private readonly interrupts = new InterruptWatch();
+  private fontScale = 1;
   private readonly interruptListeners = new Set<(id: string) => void>();
 
   // Late events for tabs the user already closed are dropped, not buffered.
@@ -68,6 +71,18 @@ export class TerminalPanel {
     ];
     this.resizeObserver = new ResizeObserver(() => this.fitActive());
     this.resizeObserver.observe(body);
+  }
+
+  /**
+   * Terminals are left out of the CSS zoom (xterm maps the mouse wrongly
+   * under it), so a zoomed UI gets larger terminal text instead.
+   */
+  setFontScale(scale: number): void {
+    this.fontScale = scale;
+    for (const s of this.sessions.values()) {
+      s.term.options.fontSize = BASE_FONT * scale;
+      this.fit(s);
+    }
   }
 
   /** Notified when the user stops a Claude request with Esc (Claude Code sends no hook for it). */
@@ -144,7 +159,7 @@ export class TerminalPanel {
       term = new Terminal({
         theme: THEME,
         fontFamily: "'Cascadia Mono', Consolas, monospace",
-        fontSize: 13,
+        fontSize: BASE_FONT * this.fontScale,
         cursorBlink: true,
         scrollback: 5000,
       });

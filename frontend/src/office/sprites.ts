@@ -11,6 +11,20 @@ export type Direction = 'down' | 'up' | 'left' | 'right';
 const COLUMN: Record<Direction, number> = { down: 0, up: 1, left: 2, right: 3 };
 export const WALK_FRAMES = 4;
 export const ACTION_ROW = 4;
+/** Rows 5 and 6 of your own sheets hold up to 8 idle poses (sitting, lying, eating …). */
+export const POSE_ROW = 5;
+export const POSES = 8;
+
+export function poseRect(pose: number, frame = FRAME): { sx: number; sy: number } {
+  return { sx: (pose % 4) * frame, sy: (POSE_ROW + Math.floor(pose / 4)) * frame };
+}
+
+/** A random idle pose, how long it is held, and when the next one may start (ms). */
+export function nextPose(now: number, rand: () => number = Math.random): { pose: number; until: number; next: number } {
+  const pose = Math.min(POSES - 1, Math.floor(rand() * POSES));
+  const until = now + 2500 + rand() * 1500;
+  return { pose, until, next: until + 4000 + rand() * 6000 };
+}
 
 export function frameRect(dir: Direction, row: number, frame = FRAME): { sx: number; sy: number } {
   return { sx: COLUMN[dir] * frame, sy: row * frame };

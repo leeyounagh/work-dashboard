@@ -34,7 +34,7 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
   진행률과 지금 쓰는 도구가 머리 위에 보이고, 누르면 그 터미널로 갑니다.
   오른쪽 아래 **가이드** 를 누르면 워크스페이스 기술(go.mod, package.json, pubspec.yaml … 을 보고 판단)에 맞는
   기술 블로그를 엽니다. 사이드바의 「가이드 주제」 로 직접 정할 수 있고, 찾지 못하면 AI 관련 사이트를 엽니다.
-- **화면 확대** — Ctrl + / Ctrl − / Ctrl 0, 패널 폭은 드래그로 조절합니다.
+- **화면 확대** — Ctrl + / Ctrl − / Ctrl 0 (배율은 기억됩니다), 패널 폭은 드래그로 조절합니다.
 
 ### 구동 원리
 
@@ -72,7 +72,7 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
 
 사무실은 CC0 Ninja Adventure 캐릭터를 씁니다. 쓸 권리가 있는 다른 그림을 쓰려면
 `~/.work-dashboard/characters/*.png` 에 스프라이트 시트를 넣으세요 (아래/위/왼쪽/오른쪽 4열 × 7행의 정사각 프레임,
-0–3행 걷기, 4행 책상 작업 동작 — 16×16 이면 64×112, 프레임 크기는 자유, 파일당 512 KB 이하).
+0–3행 걷기, 4행 책상 작업 동작, 5–6행 쉴 때 랜덤으로 나오는 포즈 8개 — 16×16 이면 64×112, 프레임 크기는 자유, 파일당 512 KB 이하).
 파일은 내 컴퓨터에만 있고, 넣으면 Claude 캐릭터가 그중에서 랜덤으로 나옵니다. `guide.png` 는 사무실 가이드가 됩니다.
 
 ### 개발
@@ -122,7 +122,7 @@ a single Windows executable (~13 MB, Wails + the system WebView2) instead of an 
   progress and the current tool above its head; click it to jump to its terminal. Click the **guide** (bottom right)
   for a tech blog matching the workspace (detected from go.mod, package.json, pubspec.yaml, …, or set by the workspace's
   guide topics), or an AI site when nothing matches.
-- **Zoom** — Ctrl + / Ctrl − / Ctrl 0; drag the panel edges to resize.
+- **Zoom** — Ctrl + / Ctrl − / Ctrl 0 (remembered); drag the panel edges to resize.
 
 ### How it works
 
@@ -162,7 +162,7 @@ Set `WD_DATA_DIR=<absolute path>` to use another data folder (demos, screenshots
 
 The office uses the CC0 Ninja Adventure characters. To use other art you are allowed to use, put sprite sheets in
 `~/.work-dashboard/characters/*.png` (4 columns down/up/left/right × 7 rows of square frames, rows 0–3 walking,
-row 4 working at a desk — 64×112 for 16×16 frames, any frame size works, up to 512 KB each). They stay on your
+row 4 working at a desk, rows 5–6 up to 8 idle poses shown at random — 64×112 for 16×16 frames, any frame size works, up to 512 KB each). They stay on your
 computer; each Claude session gets one of them, and `guide.png` becomes the office guide.
 
 ### Develop
