@@ -1,6 +1,6 @@
 import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
 import { drawDesk, drawRoom, drawRug } from './background';
-import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, frameRect, frameSize, pickSheet, sheets, type Direction } from './sprites';
+import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, drawSize, frameRect, frameSize, pickSheet, sheets, type Direction } from './sprites';
 
 /** A terminal as the office sees it. */
 export interface OfficeTerminal {
@@ -212,7 +212,15 @@ export class Office {
     // Front-most (lowest) character first, matching the drawing order.
     return [...this.visible(), this.guide]
       .sort((a, b) => b.y - a.y)
-      .find((c) => Math.abs(x - c.x) < SIZE / 2 && y > c.y - SIZE && y < c.y + 4);
+      .find((c) => {
+        const size = this.sizeOf(c);
+        return Math.abs(x - c.x) < size / 2 && y > c.y - size && y < c.y + 4;
+      });
+  }
+
+  /** Drawn size of a character: the dog and pixel art 48px, detailed sheets bigger. */
+  private sizeOf(c: Character): number {
+    return c.dog || !c.sheet.naturalWidth ? SIZE : drawSize(frameSize(c.sheet.naturalWidth));
   }
 
   private loop(t: number) {
@@ -290,7 +298,7 @@ export class Office {
     ctx.fillRect(x, y + 2, 24, 12);
   }
 
-  private drawSprite(c: Character, moving: boolean, atDesk: boolean, x: number, y: number) {
+  private drawSprite(c: Character, moving: boolean, atDesk: boolean, x: number, y: number, size: number) {
     const { ctx } = this;
     if (!c.sheet.complete || !c.sheet.naturalWidth) return; // still loading
     if (c.dog) {
@@ -314,7 +322,7 @@ export class Office {
     const { sx, sy } = frameRect(c.dir, row, frame);
     // Pixel art stays crisp; larger drawn frames (your own sheets) are smoothed when shrunk.
     ctx.imageSmoothingEnabled = frame > FRAME;
-    ctx.drawImage(c.sheet, sx, sy, frame, frame, x, y, SIZE, SIZE);
+    ctx.drawImage(c.sheet, sx, sy, frame, frame, x, y, size, size);
     ctx.imageSmoothingEnabled = false;
   }
 
@@ -324,14 +332,15 @@ export class Office {
     const atDesk = !moving && c.state.mood !== 'idle';
     // Idle characters float gently.
     const bob = !moving && !atDesk ? Math.round(Math.sin(now / 400 + c.phase) * 3) : 0;
-    const x = Math.round(c.x - SIZE / 2);
-    const y = Math.round(c.y - SIZE + bob);
+    const size = this.sizeOf(c);
+    const x = Math.round(c.x - size / 2);
+    const y = Math.round(c.y - size + bob);
     ctx.globalAlpha = c.term.alive ? 1 : 0.4;
     if (!moving && !atDesk) {
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(x + 12, Math.round(c.y), SIZE - 24, 3);
+      ctx.fillRect(x + size / 4, Math.round(c.y), size / 2, 3);
     }
-    this.drawSprite(c, moving, atDesk, x, y);
+    this.drawSprite(c, moving, atDesk, x, y, size);
     ctx.globalAlpha = 1;
 
     // Terminal name above the head, workspace name below the feet.

@@ -16,6 +16,9 @@ export function frameRect(dir: Direction, row: number, frame = FRAME): { sx: num
   return { sx: COLUMN[dir] * frame, sy: row * frame };
 }
 
+/** CSS px a character is drawn at: 16px pixel art ×3, detailed (larger) frames bigger. */
+export const drawSize = (frame: number) => (frame > FRAME ? 80 : FRAME * 3);
+
 /** Frame size of a sheet: 4 columns wide, so your own sheets may use larger frames. */
 export const frameSize = (sheetWidth: number) => (sheetWidth > 0 ? sheetWidth / 4 : FRAME);
 

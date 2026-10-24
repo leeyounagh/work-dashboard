@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME, directionFor, frameRect, frameSize, hash, pickSheet } from './sprites';
+import { FRAME, directionFor, drawSize, frameRect, frameSize, hash, pickSheet } from './sprites';
 
 describe('frameRect', () => {
   it('maps direction to column and frame to row on a 4×7 sheet of 16px frames', () => {
@@ -11,6 +11,13 @@ describe('frameRect', () => {
 
   it('works on larger frames for your own sheets', () => {
     expect(frameRect('left', 4, 128)).toEqual({ sx: 256, sy: 512 });
+  });
+});
+
+describe('drawSize', () => {
+  it('draws pixel art at 48px and detailed (larger) frames bigger', () => {
+    expect(drawSize(16)).toBe(48);
+    expect(drawSize(128)).toBe(80);
   });
 });
 
