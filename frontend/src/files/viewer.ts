@@ -102,8 +102,9 @@ function editor(parent: HTMLElement, text: string, lang: Language): EditorView {
         highlightSelectionMatches(),
         search({ top: true }),
         keymap.of(searchKeymap),
+        // readOnly 로 편집은 막되 editable 은 끄지 않는다 — editable:false 면
+        // contenteditable=false 가 되어 포커스를 못 받고 Ctrl+F(키맵)가 안 먹는다.
         EditorState.readOnly.of(true),
-        EditorView.editable.of(false),
         theme,
         syntaxHighlighting(highlight),
         LANGUAGES[lang](),
