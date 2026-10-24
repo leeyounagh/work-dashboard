@@ -78,8 +78,8 @@ func TestFolderFilesFiltersAndLimits(t *testing.T) {
 
 func TestFolderFilesNeedsFolder(t *testing.T) {
 	h, wsID, _, _ := folderHarness(t, map[string]any{"folder": ""})
-	if res := h.app.WidgetData(wsID, 0); res.Error == "" {
-		t.Fatal("want an error without a folder")
+	if res := h.app.WidgetData(wsID, 0); res.Setup == "" || res.Error != "" {
+		t.Fatalf("want a setup hint without a folder: %+v", res)
 	}
 }
 

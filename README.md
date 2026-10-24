@@ -18,6 +18,10 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
   `--add-dir` 로 넘기며, 워크스페이스 메모를 `--append-system-prompt-file` 로 전달합니다. **+ 셸** 은 PowerShell 을 엽니다.
 - **터미널 + 파일 트리** — 터미널이 앱 안에 있고, Claude 에게 「○○ 코드 열어줘」 라고 하면 그 파일이 트리와 뷰어에 열립니다.
   파일 이름·경로 검색도 됩니다. 앱을 다시 켜면 열려 있던 Claude 대화를 이어서 열 수 있습니다.
+- **처음 켜지는 위젯** — 새 워크스페이스는 이 컴퓨터에서 바로 쓸 수 있는 위젯만 켜고 시작합니다.
+  폴더가 GitHub 레포이고 `gh` 에 로그인돼 있으면 그 레포의 PR 위젯, git 레포면 워크트리, 그리고 항상 Claude 한도·세션 복원.
+  Linear · Notion · 배포 · QA 처럼 계정이나 설정이 필요한 위젯은 꺼진 채로 「위젯 관리」에 있고,
+  설정이 덜 된 위젯은 오류 대신 무엇을 넣으면 되는지 알려 줍니다.
 - **켜고 끄는 위젯**
   - PR 리뷰 현황, CI 실패 PR, 리뷰 요청 큐 (GitHub CLI)
   - Linear 내 이슈(할 일 → 진행 중 → 리뷰·확인 중으로 묶음), Linear 알림(나를 부르거나 내가 담당인 것만), Notion 명세 —
@@ -79,6 +83,10 @@ a single Windows executable (~13 MB, Wails + the system WebView2) instead of an 
   `--add-dir` for the others and the workspace notes via `--append-system-prompt-file`; **+ 셸** opens PowerShell.
 - **Terminals + file tree** — embedded terminals; files Claude opens for you ("open the X code") appear in the tree and
   viewer. File name/path search, and Claude conversations that were open can be resumed after a restart.
+- **What starts switched on** — a new workspace turns on only the widgets that work on this computer: PR widgets
+  for the folder's GitHub repositories when `gh` is logged in, worktrees for git folders, and always Claude usage and
+  session restore. Linear, Notion, deploy status and QA need an account or settings, so they wait in widget management;
+  a widget that isn't set up yet says what to fill in instead of showing an error.
 - **Toggleable widgets**
   - PR reviews, CI failures, review queue (GitHub CLI)
   - My Linear issues (grouped: to do → in progress → in review/test), Linear inbox (only mentions, assignments and my

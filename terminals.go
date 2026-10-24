@@ -38,23 +38,6 @@ func (a *App) loadWorkspace(id string) (workspace.Workspace, error) {
 	return ws, nil
 }
 
-// defaultWidgets is what a new workspace starts with: every widget, enabled.
-// Users switch off what they don't need.
-func defaultWidgets() []widget.Instance {
-	catalog := widget.Catalog()
-	out := make([]widget.Instance, 0, len(catalog))
-	for _, def := range catalog {
-		if def.Multiple {
-			continue // added on purpose, with a name, from 위젯 관리
-		}
-		inst, err := widget.NewInstance(def.ID)
-		if err == nil {
-			out = append(out, inst)
-		}
-	}
-	return out
-}
-
 // OpenClaude starts Claude Code with every folder of the workspace.
 func (a *App) OpenClaude(workspaceID string, cols, rows int) (term.Info, error) {
 	return a.startClaude(workspaceID, launch.ClaudeOptions{}, cols, rows)

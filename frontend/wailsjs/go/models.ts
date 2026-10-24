@@ -315,6 +315,7 @@ export namespace main {
 	    type: string;
 	    data?: any;
 	    error?: string;
+	    setup?: string;
 	    // Go type: time
 	    fetchedAt: any;
 	
@@ -327,6 +328,7 @@ export namespace main {
 	        this.type = source["type"];
 	        this.data = source["data"];
 	        this.error = source["error"];
+	        this.setup = source["setup"];
 	        this.fetchedAt = this.convertValues(source["fetchedAt"], null);
 	    }
 	

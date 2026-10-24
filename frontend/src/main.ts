@@ -43,6 +43,7 @@ import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { Office } from './office/office';
 import { guardZoomKeys } from './layout/zoomKeys';
+import { markNewWorkspace } from './widgets/onboarding';
 import { useCustomSheets } from './office/sprites';
 import { mountSplitters } from './layout/splitters';
 import { TabHost } from './tabs/tabHost';
@@ -274,6 +275,7 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
     },
     save: async () => {
       if (!state.draft || state.saving) return; // a double click must not create twice
+      const isNew = !state.draft.id;
       state = { ...state, saving: true };
       render(false);
       let result: Workspace;
@@ -286,6 +288,8 @@ function createWorkspaceController(onSelectionChange: (selection: Selection) => 
         return;
       }
       state = { ...state, saving: false };
+      // A new workspace got the widgets that work here; say so once.
+      if (isNew) markNewWorkspace(result.id);
       await reload(result.id);
     },
     remove: async () => {

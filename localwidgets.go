@@ -240,7 +240,7 @@ func (a *App) worktrees(ctx context.Context, ws workspace.Workspace, s widgetdat
 func (a *App) deploy(ctx context.Context, ws workspace.Workspace, s widgetdata.Settings) (widgetdata.DeployData, error) {
 	line := s.String("command", "")
 	if line == "" {
-		return widgetdata.DeployData{}, errors.New("위젯 설정에서 배포 상태를 출력하는 명령을 입력하세요 (예: node <deploy-status>/scripts/index.mjs --json)")
+		return widgetdata.DeployData{}, needsSetup{"「설정」에 배포 상태를 JSON 으로 출력하는 명령을 넣으면 보입니다 (예: node <deploy-status>/scripts/index.mjs --json)"}
 	}
 	dir, _ := os.UserHomeDir()
 	if len(ws.Folders) > 0 {
@@ -330,7 +330,8 @@ var linearSchema = json.RawMessage(`{"type":"object","properties":{"connectorAva
 "url":{"type":"string"},"priority":{"type":"string"},"updatedAt":{"type":"string"}},"required":["id","title","state","url"]}}},
 "required":["connectorAvailable","issues"]}`)
 
-var errNoConnector = errors.New("Claude 에서 이 커넥터 도구를 찾지 못했습니다. Claude Code 의 MCP/커넥터 연결을 확인하세요")
+// errNoConnector: Claude Code has no connector for the service (yet).
+var errNoConnector = needsSetup{"Claude Code 에 이 서비스의 커넥터(MCP)를 연결하면 보입니다. 쓰지 않는다면 「위젯 관리」에서 끄세요"}
 
 func (a *App) linear(ctx context.Context, s widgetdata.Settings, fresh bool) (any, error) {
 	teams, states := s.Strings("teams"), s.Strings("states")
@@ -383,7 +384,7 @@ var notionSchema = json.RawMessage(`{"type":"object","properties":{"connectorAva
 func (a *App) notion(ctx context.Context, s widgetdata.Settings, fresh bool) (any, error) {
 	pages := s.Strings("pages")
 	if len(pages) == 0 {
-		return nil, errors.New("위젯 설정에 Notion 페이지 ID 를 넣으세요")
+		return nil, needsSetup{"「설정」에 볼 Notion 페이지 ID 를 넣으면 보입니다"}
 	}
 	if err := checkFilters("페이지 ID", pages, notionIDPattern); err != nil {
 		return nil, err
@@ -483,7 +484,7 @@ func lastLines(text string, n int) string {
 func (a *App) commandWidget(ctx context.Context, ws workspace.Workspace, s widgetdata.Settings) (CommandData, error) {
 	line := s.String("command", "")
 	if line == "" {
-		return CommandData{}, errors.New("설정에서 실행할 명령을 입력하세요")
+		return CommandData{}, needsSetup{"「설정」에 실행할 명령을 넣으면 출력이 보입니다"}
 	}
 	dir, _ := os.UserHomeDir()
 	if len(ws.Folders) > 0 {

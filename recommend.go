@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -18,7 +17,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/leeyounagh/work-dashboard/internal/claudeask"
-	"github.com/leeyounagh/work-dashboard/internal/procutil"
 	"github.com/leeyounagh/work-dashboard/internal/widget"
 )
 
@@ -75,16 +73,8 @@ func repoFromRemote(remote string) string {
 }
 
 // repoName reads "owner/name" from a folder's origin remote ("" if none).
-func repoName(parent context.Context, folder string) string {
-	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
-	defer cancel()
-	cmd := procutil.Background(exec.CommandContext(ctx, "git", "-C", folder, "remote", "get-url", "origin"))
-	cmd.WaitDelay = procutil.WaitDelay
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return repoFromRemote(string(out))
+func repoName(ctx context.Context, folder string) string {
+	return repoFromRemote(remoteURL(ctx, folder))
 }
 
 func newWidgetID(typ string) string {

@@ -84,7 +84,7 @@ func folderFiles(s widgetdata.Settings) (FolderFilesData, error) {
 	dir := strings.TrimSpace(s.String("folder", ""))
 	d := FolderFilesData{Folder: dir, Files: []FolderFile{}}
 	if dir == "" {
-		return d, errors.New("「설정」에서 볼 폴더 경로를 입력하세요")
+		return d, needsSetup{"「설정」에 볼 폴더 경로를 넣으면 문서가 보입니다"}
 	}
 	if isNetworkPath(dir) {
 		return d, errors.New("네트워크 경로(\\\\…)는 볼 수 없습니다. 이 컴퓨터의 폴더를 지정하세요")

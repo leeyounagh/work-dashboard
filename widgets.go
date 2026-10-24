@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ type WidgetResult struct {
 	Type      string    `json:"type"`
 	Data      any       `json:"data,omitempty"`
 	Error     string    `json:"error,omitempty"`
+	Setup     string    `json:"setup,omitempty"` // what to set up before it can show anything
 	FetchedAt time.Time `json:"fetchedAt"`
 }
 
@@ -217,6 +219,11 @@ func (a *App) widgetData(workspaceID string, index int, fresh bool) WidgetResult
 	defer cancel()
 
 	data, err := a.buildWidget(ctx, ws, inst.Type, s, fresh)
+	var setup needsSetup
+	if errors.As(err, &setup) {
+		res.Setup = setup.msg
+		return res
+	}
 	if err != nil {
 		res.Error = err.Error()
 		return res

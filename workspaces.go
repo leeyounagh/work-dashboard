@@ -41,10 +41,10 @@ func (a *App) SaveWorkspace(ws workspace.Workspace) (workspace.Workspace, error)
 		}
 		return ws, nil
 	}
-	// A new workspace starts with every widget; an existing one may
-	// legitimately have none because the user switched them all off.
+	// A new workspace starts with the widgets that work here; an existing
+	// one may legitimately have none because the user switched them all off.
 	if len(ws.Widgets) == 0 {
-		ws.Widgets = defaultWidgets()
+		ws.Widgets = defaultWidgets(a.detectEnv(ws.Folders))
 	}
 	return a.createWorkspace(ws)
 }

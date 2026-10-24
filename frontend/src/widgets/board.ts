@@ -18,6 +18,7 @@ import { formatSetting, parseSetting } from './settingsForm';
 import { renderLocal, type WidgetActions } from './localRenderers';
 import { collapseKey, loadCollapsed, saveCollapsed, toggleCollapsed, type Collapsed } from './collapse';
 import { removeWidget, renderManager, updateWidget, upsertWidget, widgetKey, type SaveWidgets } from './manager';
+import { dismissWelcome, renderWelcome, showsWelcome } from './onboarding';
 
 export { upsertWidget, type SaveWidgets };
 import { makeSortable, moveBy, type Where } from '../lib/sortable';
@@ -28,6 +29,7 @@ interface Result {
   type: string;
   data?: unknown;
   error?: string;
+  setup?: string; // what to set up before the widget can show anything
 }
 
 const open = (url: string) => BrowserOpenURL(url);
@@ -153,6 +155,18 @@ export class WidgetBoard {
         this.def(inst.type) ? this.card(ws, inst, index) : h('p', 'muted small', `알 수 없는 위젯: ${inst.type}`),
       );
       if (!nodes.length) nodes.push(h('p', 'muted', '켜진 위젯이 없습니다. 「위젯 관리」에서 켜세요.'));
+      if (showsWelcome(ws.id)) {
+        const done = () => {
+          dismissWelcome(ws.id);
+          this.render();
+        };
+        nodes.unshift(
+          renderWelcome(() => {
+            this.managing = true;
+            done();
+          }, done),
+        );
+      }
       this.host.replaceChildren(head, ...nodes);
       // Drag a card by its ⠿ grip to change the order (saved with the workspace).
       makeSortable(this.host, '.w-card[data-sort-key]', (from, to, where) => {
@@ -216,6 +230,7 @@ export class WidgetBoard {
         const res = (await (fresh ? RefreshWidget : WidgetData)(ws.id, index)) as Result;
         if (gen !== this.generation) return;
         if (res.error) body.replaceChildren(h('p', 'error small', res.error));
+        else if (res.setup) body.replaceChildren(h('p', 'w-setup muted small', res.setup));
         else body.replaceChildren(renderData(res.type, res.data, this.actionsFor(ws.id, inst.id)));
         when.textContent = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
         this.maybeAlert(res);

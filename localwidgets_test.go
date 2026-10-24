@@ -71,7 +71,8 @@ func TestConnectorInputsAreValidated(t *testing.T) {
 		{Type: widget.NotionSpecs, Enabled: true},
 	} {
 		h, ws, calls, _ := localHarness(t, inst)
-		if res := h.app.WidgetData(ws.ID, 0); res.Error == "" {
+		// Bad input is an error; missing input asks for setup.
+		if res := h.app.WidgetData(ws.ID, 0); res.Error == "" && res.Setup == "" {
 			t.Errorf("%s should be rejected: %+v", inst.Type, res)
 		}
 		if calls.Load() != 0 {
@@ -148,8 +149,8 @@ func TestDeployWidget(t *testing.T) {
 		t.Fatalf("deploy = %+v", d)
 	}
 	h2, ws2, _, _ := localHarness(t, widget.Instance{Type: widget.DeploySwap, Enabled: true})
-	if res := h2.app.WidgetData(ws2.ID, 0); !strings.Contains(res.Error, "명령") {
-		t.Fatalf("missing command error = %q", res.Error)
+	if res := h2.app.WidgetData(ws2.ID, 0); !strings.Contains(res.Setup, "명령") {
+		t.Fatalf("missing command setup hint = %q", res.Setup)
 	}
 }
 
@@ -274,13 +275,13 @@ func TestWidgetTimeouts(t *testing.T) {
 	}
 }
 
-func TestMissingConnectorIsAnError(t *testing.T) {
+func TestMissingConnectorAsksForSetup(t *testing.T) {
 	h, ws, _, _ := localHarness(t, widget.Instance{Type: widget.LinearIssues, Enabled: true})
 	h.app.deps.Ask = func(_ context.Context, _ string, _ ...string) ([]byte, error) {
 		return []byte(`{"is_error":false,"structured_output":{"connectorAvailable":false,"issues":[]}}`), nil
 	}
-	if res := h.app.WidgetData(ws.ID, 0); !strings.Contains(res.Error, "커넥터") {
-		t.Fatalf("res = %+v, want a connector error instead of an empty list", res)
+	if res := h.app.WidgetData(ws.ID, 0); !strings.Contains(res.Setup, "커넥터") {
+		t.Fatalf("res = %+v, want a connector setup hint instead of an empty list", res)
 	}
 }
 

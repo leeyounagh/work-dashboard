@@ -309,3 +309,6 @@ body.resizing-col .tab-pane, body.resizing-row .tab-pane, body.resizing-col canv
 :root { accent-color: var(--accent); }
 .w-manage-row > button { flex-shrink: 0; white-space: nowrap; }
 .w-search { width: 100%; margin-bottom: 6px; }
+.w-welcome { border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; margin-bottom: var(--gap); background: var(--panel-raised); display: flex; flex-direction: column; gap: 6px; }
+.w-welcome p { margin: 0; }
+.w-setup { margin: 0; }

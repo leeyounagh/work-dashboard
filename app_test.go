@@ -117,8 +117,9 @@ func TestSaveWorkspaceCreatesWithIDAndDefaultWidgets(t *testing.T) {
 	if saved.ID != "front-end" || saved.Name != "Front End" {
 		t.Fatalf("saved = %+v", saved)
 	}
-	if len(saved.Widgets) != singleWidgets() {
-		t.Fatalf("new workspace should get every single-instance widget, got %d", len(saved.Widgets))
+	// A plain folder: the widgets that need no setup (see onboarding_test.go).
+	if !slices.Equal(types(saved.Widgets), types(defaultWidgets(widgetEnv{}))) {
+		t.Fatalf("new workspace widgets = %v", types(saved.Widgets))
 	}
 	res := h.app.Workspaces()
 	if len(res.Workspaces) != 1 || res.Workspaces[0].ID != "front-end" {
@@ -142,8 +143,8 @@ func TestSaveWorkspaceDefaultsEmptyWidgetListOnCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(saved.Widgets) != singleWidgets() {
-		t.Fatalf("new workspace got %d widgets, want all single-instance ones", len(saved.Widgets))
+	if len(saved.Widgets) == 0 {
+		t.Fatal("new workspace got no widgets")
 	}
 	// An existing workspace keeps an empty list: the user switched everything off.
 	saved.Widgets = []widget.Instance{}
@@ -361,15 +362,4 @@ func TestOpenClaudeReportsBrokenWorkspaceFile(t *testing.T) {
 	if _, err := h.app.OpenClaude("../bad", 80, 24); err == nil || strings.Contains(err.Error(), "찾지 못했습니다") {
 		t.Fatalf("invalid id should not be reported as not found: %v", err)
 	}
-}
-
-// singleWidgets counts catalog widgets a new workspace starts with.
-func singleWidgets() int {
-	n := 0
-	for _, d := range widget.Catalog() {
-		if !d.Multiple {
-			n++
-		}
-	}
-	return n
 }
