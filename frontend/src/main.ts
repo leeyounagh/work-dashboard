@@ -46,6 +46,7 @@ import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { Office } from './office/office';
 import { guardZoomKeys } from './layout/zoomKeys';
+import { isMac } from './lib/platform';
 import { currentZoom, loadZoom, setZoom, stepZoom } from './layout/zoom';
 import { markNewWorkspace } from './widgets/onboarding';
 import type { TodoItem } from './widgets/todo';
@@ -464,7 +465,7 @@ async function start() {
     const next = stepZoom(currentZoom(), dir);
     setZoom(next, onZoom);
     toast(`화면 크기 ${Math.round(next * 100)}%`);
-  });
+  }, isMac());
   import.meta.hot?.dispose(stopZoomGuard);
 
   const loadCatalog = async () => {

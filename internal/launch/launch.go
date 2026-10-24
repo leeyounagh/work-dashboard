@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/leeyounagh/work-dashboard/internal/fsutil"
@@ -57,7 +59,7 @@ func ClaudeSpec(ws workspace.Workspace, opts ClaudeOptions) (term.Spec, error) {
 		// otherwise swallow the prompt, and a prompt starting with "-" stays text.
 		args = append(args, "--", opts.Prompt)
 	}
-	spec := term.Spec{Name: opts.Exe, Args: args, Dir: ws.Folders[0], Env: CleanEnv(os.Environ()), Title: "Claude · " + ws.Name, Kind: "claude"}
+	spec := term.Spec{Name: opts.Exe, Args: args, Dir: ws.Folders[0], Env: TerminalEnv(os.Environ(), runtime.GOOS), Title: "Claude · " + ws.Name, Kind: "claude"}
 	return wrapSpec(spec)
 }
 
@@ -73,7 +75,36 @@ func ShellSpec(ws workspace.Workspace, shell string) (term.Spec, error) {
 		}
 		dir = home
 	}
-	return term.Spec{Name: shell, Args: []string{"-NoLogo"}, Dir: dir, Env: CleanEnv(os.Environ()), Title: "Shell · " + ws.Name, Kind: "shell"}, nil
+	return term.Spec{Name: shell, Args: ShellArgs(shell), Dir: dir, Env: TerminalEnv(os.Environ(), runtime.GOOS), Title: "Shell · " + ws.Name, Kind: "shell"}, nil
+}
+
+// ShellArgs starts PowerShell without its banner and Unix shells as login
+// shells, so their profile (PATH, prompt) is loaded like in a terminal app.
+func ShellArgs(shell string) []string {
+	name := strings.ToLower(shell[strings.LastIndexAny(shell, `/\`)+1:])
+	if strings.HasPrefix(name, "pwsh") || strings.HasPrefix(name, "powershell") {
+		return []string{"-NoLogo"}
+	}
+	return []string{"-l"}
+}
+
+// TerminalEnv is the environment for a terminal: CleanEnv, plus on macOS and
+// Linux the TERM a pseudo terminal needs (Windows' ConPTY does not use it).
+func TerminalEnv(environ []string, goos string) []string {
+	env := CleanEnv(environ)
+	if goos == "windows" {
+		return env
+	}
+	has := func(name string) bool {
+		return slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, name+"=") })
+	}
+	if !has("TERM") {
+		env = append(env, "TERM=xterm-256color")
+	}
+	if !has("COLORTERM") {
+		env = append(env, "COLORTERM=truecolor")
+	}
+	return env
 }
 
 // shimTarget matches the exe line of an npm-generated .cmd shim, e.g.

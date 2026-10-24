@@ -34,14 +34,6 @@ var assets embed.FS
 // window does not flash a different colour before the page paints.
 var windowBackground = &options.RGBA{R: 0x1e, G: 0x1f, B: 0x22, A: 0xff}
 
-// preferredShell returns PowerShell 7 when installed, else Windows PowerShell.
-func preferredShell() string {
-	if _, err := exec.LookPath("pwsh"); err == nil {
-		return "pwsh"
-	}
-	return "powershell.exe"
-}
-
 // askClaude runs headless claude (resolved on each call, so installing Claude
 // Code while the app runs works).
 func askClaude(ctx context.Context, dir string, args ...string) ([]byte, error) {
@@ -65,6 +57,7 @@ func instanceID() string {
 }
 
 func main() {
+	fixPath() // macOS / Linux: the terminal PATH, for claude, gh and git
 	dir, err := workspace.DefaultDir()
 	if err != nil {
 		log.Fatalf("work-dashboard: %v", err)

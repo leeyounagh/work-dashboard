@@ -15,6 +15,13 @@ describe('zoomDirection', () => {
     expect(zoomDirection(key({ key: 'c', ctrlKey: true }))).toBeUndefined();
     expect(zoomDirection(key({ key: '-', ctrlKey: true, altKey: true }))).toBeUndefined();
   });
+
+  it('uses Cmd on macOS', () => {
+    expect(zoomDirection(key({ key: '=', metaKey: true }), true)).toBe(1);
+    expect(zoomDirection(key({ key: '-', metaKey: true }), true)).toBe(-1);
+    expect(zoomDirection(key({ key: '=', ctrlKey: true }), true)).toBeUndefined();
+    expect(zoomDirection(key({ key: '=', metaKey: true }), false)).toBeUndefined();
+  });
 });
 
 describe('guardZoomKeys', () => {

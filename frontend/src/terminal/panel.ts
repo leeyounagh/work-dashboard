@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
 import { ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
 import { clipboardAction } from './clipboard';
+import { isMac } from '../lib/platform';
 import { base64ToBytes } from '../lib/workspaceDraft';
 import type { TabHost } from '../tabs/tabHost';
 import { EarlyEvents, type TermExit } from './earlyEvents';
@@ -241,7 +242,7 @@ export class TerminalPanel {
         .catch((err) => this.onError(`붙여넣지 못했습니다: ${String(err)}`));
     };
     term.attachCustomKeyEventHandler((e) => {
-      const action = clipboardAction(e, term.hasSelection());
+      const action = clipboardAction(e, term.hasSelection(), isMac());
       if (!action) return true;
       // Stop the browser's own paste event too, or the text would arrive twice.
       e.preventDefault();

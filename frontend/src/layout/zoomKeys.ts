@@ -8,15 +8,17 @@ const KEYS: Record<string, 1 | -1 | 0> = { '+': 1, '=': 1, '-': -1, '0': 0 };
 const CODES: Record<string, 1 | -1 | 0> = { NumpadAdd: 1, NumpadSubtract: -1, Numpad0: 0 };
 
 /** 1 = zoom in, -1 = out, 0 = reset; undefined when it is not a zoom key. */
-export function zoomDirection(e: KeyboardEvent): 1 | -1 | 0 | undefined {
-  if (!e.ctrlKey || e.altKey || e.metaKey) return undefined;
+export function zoomDirection(e: KeyboardEvent, mac = false): 1 | -1 | 0 | undefined {
+  // Cmd on macOS, Ctrl elsewhere.
+  const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+  if (!mod || e.altKey) return undefined;
   return CODES[e.code] ?? KEYS[e.key];
 }
 
 /** Listens on the window in the capture phase; returns a function that stops it. */
-export function guardZoomKeys(target: Window, onZoom: (dir: 1 | -1 | 0) => void): () => void {
+export function guardZoomKeys(target: Window, onZoom: (dir: 1 | -1 | 0) => void, mac = false): () => void {
   const onKey = (e: KeyboardEvent) => {
-    const dir = zoomDirection(e);
+    const dir = zoomDirection(e, mac);
     if (dir === undefined) return;
     e.preventDefault();
     e.stopPropagation();

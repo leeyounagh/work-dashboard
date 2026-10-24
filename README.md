@@ -10,7 +10,19 @@
 
 Claude Code 사용자를 위한 가벼운 데스크톱 업무 대시보드입니다.
 [Munder Difflin](https://github.com/HarnessMD/munder-difflin) 에서 영감을 받아 작게 다시 만들었습니다 —
-Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 WebView2)입니다.
+Electron 앱 대신 OS 의 웹 엔진을 쓰는 작은 앱 하나(Windows 약 13 MB, Wails)입니다. Windows · macOS · Linux 를 지원합니다.
+
+### 다운로드
+
+[Releases](https://github.com/leeyounagh/work-dashboard/releases) 에서 OS 에 맞는 파일을 받으세요.
+
+| OS | 파일 | 처음 열 때 |
+|---|---|---|
+| Windows 10/11 | `work-dashboard-windows-amd64.exe` | SmartScreen 경고가 뜨면 「추가 정보 → 실행」 |
+| macOS (Intel · Apple 칩) | `work-dashboard-macos-universal.zip` | 압축을 풀어 「응용 프로그램」 으로 옮긴 뒤, 서명이 없어서 처음 한 번은 **오른쪽 클릭 → 열기 → 열기**. 그래도 막히면 터미널에서 `xattr -dr com.apple.quarantine /Applications/work-dashboard.app` |
+| Linux (x86-64) | `work-dashboard-linux-amd64.tar.gz` | WebKitGTK 가 필요합니다: Ubuntu/Debian `sudo apt install libwebkit2gtk-4.1-0`, Fedora `sudo dnf install webkit2gtk4.1` |
+
+macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 터미널 복사·붙여넣기 Cmd+C/V).
 
 ### 무엇을 하나요
 
@@ -39,13 +51,13 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
 
 ### 구동 원리
 
-브라우저 화면을 품은 Windows 프로그램 하나입니다. 화면은 웹 기술(TypeScript)로 그리고, 실제 일은 같은 exe 안의 Go 코드가 합니다.
+브라우저 화면을 품은 데스크톱 프로그램 하나입니다. 화면은 웹 기술(TypeScript)로 그리고, 실제 일은 같은 exe 안의 Go 코드가 합니다.
 
 ```
-┌────────────── work-dashboard.exe ──────────────┐
-│ 화면: WebView2(Windows 내장 Edge 엔진) + TS    │
+┌─────────────── work-dashboard ─────────────────┐
+│ 화면: OS 웹 엔진(WebView2·WebKit) + TS         │
 │   ↕ 함수 호출 · 이벤트 (Wails)                 │
-│ Go: 터미널(ConPTY) · 파일 · gh/git/claude 실행 │
+│ Go: 터미널(pty) · 파일 · gh/git/claude 실행    │
 │     · 127.0.0.1 브리지(Claude 훅 · open_files) │
 └────────────────────────────────────────────────┘
    설정 → ~/.work-dashboard/      외부 → gh · claude
@@ -60,7 +72,7 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
 
 ### 필요한 것
 
-- Windows 10/11 (WebView2 런타임은 Windows 11 에 기본 포함)
+- Windows 10/11 (WebView2 런타임은 Windows 11 에 기본 포함), macOS 11 이상, 또는 WebKitGTK 4.1 이 있는 Linux
 - 데이터 위젯용 [Claude Code](https://claude.com/claude-code) 와 [GitHub CLI](https://cli.github.com/)
 
 ### 내 데이터
@@ -81,7 +93,7 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 WD_DEV_UNLOCK=1 wails dev               # 라이브 리로드 (없으면 로컬 데이터가 잠깁니다, 아래 참고)
-wails build -ldflags "-s -w"           # build/bin/work-dashboard.exe
+wails build -ldflags "-s -w"           # build/bin/work-dashboard.exe (macOS: -platform darwin/universal, Linux: -tags webkit2_41)
 
 go test -cover ./...
 cd frontend && npm test
@@ -97,7 +109,20 @@ cd frontend && npm test
 
 A lightweight desktop work dashboard for Claude Code users.
 Inspired by [Munder Difflin](https://github.com/HarnessMD/munder-difflin), rebuilt small:
-a single Windows executable (~13 MB, Wails + the system WebView2) instead of an Electron app.
+one small app using the operating system's web engine (~13 MB on Windows, Wails) instead of an Electron app. It runs on
+Windows, macOS and Linux.
+
+### Download
+
+Get the file for your OS from [Releases](https://github.com/leeyounagh/work-dashboard/releases).
+
+| OS | File | First start |
+|---|---|---|
+| Windows 10/11 | `work-dashboard-windows-amd64.exe` | if SmartScreen warns, "More info → Run anyway" |
+| macOS (Intel and Apple silicon) | `work-dashboard-macos-universal.zip` | unzip, move it to Applications; it is not signed, so the first time **right-click → Open → Open**. Still blocked: `xattr -dr com.apple.quarantine /Applications/work-dashboard.app` |
+| Linux (x86-64) | `work-dashboard-linux-amd64.tar.gz` | needs WebKitGTK: Ubuntu/Debian `sudo apt install libwebkit2gtk-4.1-0`, Fedora `sudo dnf install webkit2gtk4.1` |
+
+On macOS the shortcuts use **Cmd** instead of Ctrl (zoom Cmd +/−/0, terminal copy/paste Cmd+C/V).
 
 ### What it does
 
@@ -128,14 +153,14 @@ a single Windows executable (~13 MB, Wails + the system WebView2) instead of an 
 
 ### How it works
 
-One Windows program with a browser view inside: the UI is web tech (TypeScript), the real work is done by Go code in
+One desktop program with a browser view inside: the UI is web tech (TypeScript), the real work is done by Go code in
 the same executable.
 
 ```
-┌────────────── work-dashboard.exe ──────────────┐
-│ UI: WebView2 (Windows' Edge engine) + TS       │
+┌─────────────── work-dashboard ─────────────────┐
+│ UI: OS web engine (WebView2 / WebKit) + TS     │
 │   ↕ calls · events (Wails)                     │
-│ Go: terminals (ConPTY) · files · gh/git/claude │
+│ Go: pty terminals · files · gh/git/claude      │
 │     · 127.0.0.1 bridge (hooks, open_files)     │
 └────────────────────────────────────────────────┘
    settings → ~/.work-dashboard/   outside → gh · claude
@@ -151,7 +176,7 @@ the same executable.
 
 ### Requirements
 
-- Windows 10/11 (the WebView2 runtime ships with Windows 11)
+- Windows 10/11 (the WebView2 runtime ships with Windows 11), macOS 11+, or Linux with WebKitGTK 4.1
 - [Claude Code](https://claude.com/claude-code) and the [GitHub CLI](https://cli.github.com/) for the data widgets
 
 ### Local data
@@ -172,7 +197,7 @@ computer; each Claude session gets one of them, and `guide.png` becomes the offi
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 WD_DEV_UNLOCK=1 wails dev               # live reload (local data is locked without it, see below)
-wails build -ldflags "-s -w"           # build/bin/work-dashboard.exe
+wails build -ldflags "-s -w"           # build/bin/work-dashboard.exe (macOS: -platform darwin/universal, Linux: -tags webkit2_41)
 
 go test -cover ./...
 cd frontend && npm test

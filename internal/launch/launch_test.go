@@ -270,3 +270,34 @@ func TestResolveExecutable(t *testing.T) {
 		t.Fatalf("unresolvable shim must be returned as is: %q", got)
 	}
 }
+
+func TestShellArgs(t *testing.T) {
+	tests := map[string][]string{
+		"powershell.exe":            {"-NoLogo"},
+		"pwsh":                      {"-NoLogo"},
+		`C:\Program Files\pwsh.exe`: {"-NoLogo"},
+		"/bin/zsh":                  {"-l"},
+		"/usr/bin/bash":             {"-l"},
+		"/opt/homebrew/bin/fish":    {"-l"},
+	}
+	for shell, want := range tests {
+		if got := ShellArgs(shell); !slices.Equal(got, want) {
+			t.Errorf("ShellArgs(%q) = %v, want %v", shell, got, want)
+		}
+	}
+}
+
+func TestTerminalEnv(t *testing.T) {
+	base := []string{"PATH=/usr/bin", "CLAUDECODE=1"}
+	if got := TerminalEnv(base, "windows"); !slices.Equal(got, []string{"PATH=/usr/bin"}) {
+		t.Errorf("windows env = %v", got)
+	}
+	got := TerminalEnv(base, "darwin")
+	if !slices.Contains(got, "TERM=xterm-256color") || !slices.Contains(got, "COLORTERM=truecolor") || slices.Contains(got, "CLAUDECODE=1") {
+		t.Errorf("darwin env = %v", got)
+	}
+	// An existing TERM is kept.
+	if got := TerminalEnv([]string{"TERM=screen"}, "linux"); !slices.Contains(got, "TERM=screen") || slices.Contains(got, "TERM=xterm-256color") {
+		t.Errorf("kept TERM: %v", got)
+	}
+}
