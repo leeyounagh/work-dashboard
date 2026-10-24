@@ -33,6 +33,13 @@ func NewStore(dir string) *Store {
 
 // DefaultDir is the per-user location for workspace files.
 func DefaultDir() (string, error) {
+	// WD_DATA_DIR points the app at another data folder (demos, screenshots).
+	if dir := os.Getenv("WD_DATA_DIR"); dir != "" {
+		if !filepath.IsAbs(dir) {
+			return "", fmt.Errorf("WD_DATA_DIR must be an absolute path: %q", dir)
+		}
+		return filepath.Join(dir, "workspaces"), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)

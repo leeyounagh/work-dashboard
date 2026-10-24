@@ -115,10 +115,11 @@ export class Office {
     };
   }
 
-  /** The guide stands at the right of the open floor, below the desks. */
+  /** The guide stands at the bottom right of the floor. */
   private placeGuide() {
     const x = Math.max(SIZE, this.width - 56);
-    const y = Math.max(this.deskAreaBottom() + SIZE + 24, this.height - 26);
+    // By the bottom edge, so a short office never hides it below the floor.
+    const y = this.height - 26;
     this.guide = { ...this.guide, x, y, tx: x, ty: y };
   }
 

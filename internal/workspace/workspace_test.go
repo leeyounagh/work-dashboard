@@ -353,3 +353,16 @@ func TestValidateTopics(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultDirOverride(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WD_DATA_DIR", dir)
+	got, err := DefaultDir()
+	if err != nil || got != filepath.Join(dir, "workspaces") {
+		t.Fatalf("DefaultDir = %q, %v", got, err)
+	}
+	t.Setenv("WD_DATA_DIR", "relative")
+	if _, err := DefaultDir(); err == nil {
+		t.Fatal("relative WD_DATA_DIR must be refused")
+	}
+}
