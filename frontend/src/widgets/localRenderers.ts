@@ -1,5 +1,6 @@
 import { h, link, type OpenURL } from './renderers';
 import { searchableList } from './search';
+import { renderTodo, type TodoActions, type TodoItem } from './todo';
 
 /** Things a widget can do besides showing data. */
 export interface WidgetActions {
@@ -7,6 +8,8 @@ export interface WidgetActions {
   resume(sessionId: string): void;
   /** Opens a file listed by this folder widget with its default app. */
   openFile?(name: string): void;
+  /** Edits this workspace's to-do list. */
+  todo?: TodoActions;
 }
 
 interface FolderFilesData {
@@ -347,6 +350,8 @@ export function renderLocal(type: string, data: unknown, open: OpenURL, actions?
       return renderLinearInbox(data as LinearInboxData, open);
     case 'folder-files':
       return renderFolderFiles(data as FolderFilesData, actions);
+    case 'todo':
+      return renderTodo(data as { items: TodoItem[] | null }, actions?.todo);
     default:
       return null;
   }

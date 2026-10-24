@@ -71,6 +71,8 @@ type Deps struct {
 	CharactersDir string
 	// Restorable are sessions that were open when the app last exited.
 	Restorable []sessions.Record
+	// TodosDir holds each workspace's to-do list.
+	TodosDir string
 	// OpenPath opens a file with its default app (nil disables it).
 	OpenPath func(path string) error
 }
@@ -87,6 +89,7 @@ type App struct {
 	// can be offered for restore next time.
 	shuttingDown atomic.Bool
 	restoreMu    sync.Mutex
+	todoMu       sync.Mutex // one to-do list edit at a time
 	// life is cancelled on shutdown so widget loads (gh, git, headless claude)
 	// stop with the app.
 	life      context.Context

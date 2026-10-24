@@ -32,7 +32,7 @@ func defaultWidgets(env widgetEnv) []widget.Instance {
 	if env.GitRepo {
 		ids = append(ids, widget.Worktrees)
 	}
-	ids = append(ids, widget.ClaudeUsage, widget.SessionRestore)
+	ids = append(ids, widget.Todo, widget.ClaudeUsage, widget.SessionRestore)
 	out := make([]widget.Instance, 0, len(ids))
 	for _, id := range ids {
 		inst, err := widget.NewInstance(id)

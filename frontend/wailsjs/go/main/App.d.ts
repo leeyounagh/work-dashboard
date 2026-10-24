@@ -7,9 +7,13 @@ import {sessions} from '../models';
 import {workspace} from '../models';
 import {widget} from '../models';
 
+export function AddTodo(arg1:string,arg2:string):Promise<Array<main.Todo>>;
+
 export function ClaudeStatus():Promise<main.ClaudeUsageData>;
 
 export function CustomSprites():Promise<main.Sprites>;
+
+export function DeleteTodo(arg1:string,arg2:string):Promise<Array<main.Todo>>;
 
 export function DeleteWorkspace(arg1:string):Promise<void>;
 
@@ -44,6 +48,8 @@ export function ResumeClaude(arg1:string,arg2:string,arg3:number,arg4:number):Pr
 export function SaveWorkspace(arg1:workspace.Workspace):Promise<workspace.Workspace>;
 
 export function SearchFiles(arg1:string,arg2:string):Promise<files.SearchResult>;
+
+export function SetTodoDone(arg1:string,arg2:string,arg3:boolean):Promise<Array<main.Todo>>;
 
 export function StartQA(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number):Promise<term.Info>;
 

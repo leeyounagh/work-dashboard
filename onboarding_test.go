@@ -24,7 +24,7 @@ func types(ws []widget.Instance) []string {
 
 func TestDefaultWidgetsFollowTheEnvironment(t *testing.T) {
 	base := types(defaultWidgets(widgetEnv{}))
-	if !slices.Equal(base, []string{widget.ClaudeUsage, widget.SessionRestore}) {
+	if !slices.Equal(base, []string{widget.Todo, widget.ClaudeUsage, widget.SessionRestore}) {
 		t.Fatalf("no git, no GitHub: %v", base)
 	}
 	git := types(defaultWidgets(widgetEnv{GitRepo: true}))

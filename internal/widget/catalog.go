@@ -29,6 +29,7 @@ const (
 	Command        = "command"
 	Links          = "links"
 	FolderFiles    = "folder-files"
+	Todo           = "todo"
 )
 
 // Definition describes a widget type the dashboard can render.
@@ -189,6 +190,13 @@ func init() {
 			Settings: []SettingSpec{
 				{Key: "links", Label: "링크 (이름=URL)", Kind: KindStringList, Default: []string{}},
 			},
+		},
+		Definition{
+			ID:          Todo,
+			Name:        "오늘 할 일",
+			Description: "할 일을 적고 끝나면 체크합니다. 끝낸 항목은 다음 날 정리됩니다",
+			Source:      SourceLocal,
+			Settings:    []SettingSpec{},
 		},
 		Definition{
 			ID:          FolderFiles,

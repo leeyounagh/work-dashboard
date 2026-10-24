@@ -215,7 +215,9 @@ export class WidgetBoard {
     const toggle = h('button', 'w-toggle');
     toggle.type = 'button';
     toggle.append(h('span', 'w-chevron', '▾'), h('h3', 'w-title', inst.title || def.name));
-    title.append(grip, toggle, when, reload, gear);
+    title.append(grip, toggle, when, reload);
+    // Nothing to set (e.g. 오늘 할 일): no settings button. Named widgets keep it for their name.
+    if (def.settings.length || inst.id) title.append(gear);
     const body = h('div', 'w-body', '불러오는 중…');
     const settings = h('div', 'w-settings hidden');
     card.append(title, settings, body);

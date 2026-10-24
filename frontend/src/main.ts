@@ -4,7 +4,10 @@ import './styles/app.css';
 import {
   DeleteWorkspace,
   PickFolder,
+  AddTodo,
   CustomSprites,
+  DeleteTodo,
+  SetTodoDone,
   GuideArticle,
   OpenWidgetFile,
   RestorableSessions,
@@ -45,6 +48,7 @@ import { Office } from './office/office';
 import { guardZoomKeys } from './layout/zoomKeys';
 import { currentZoom, loadZoom, setZoom, stepZoom } from './layout/zoom';
 import { markNewWorkspace } from './widgets/onboarding';
+import type { TodoItem } from './widgets/todo';
 import { useCustomSheets } from './office/sprites';
 import { mountSplitters } from './layout/splitters';
 import { TabHost } from './tabs/tabHost';
@@ -446,6 +450,11 @@ async function start() {
     openFile: widgetId
       ? (name) => void OpenWidgetFile(workspaceId, widgetId, name).catch((err) => toast(`파일을 열지 못했습니다: ${String(err)}`))
       : undefined,
+    todo: {
+      add: async (text) => ((await AddTodo(workspaceId, text)) ?? []) as TodoItem[],
+      setDone: async (id, done) => ((await SetTodoDone(workspaceId, id, done)) ?? []) as TodoItem[],
+      remove: async (id) => ((await DeleteTodo(workspaceId, id)) ?? []) as TodoItem[],
+    },
   }));
   import.meta.hot?.dispose(() => board.destroy());
   // Ctrl + / Ctrl - / Ctrl 0: the remembered zoom, terminals follow with their font size.

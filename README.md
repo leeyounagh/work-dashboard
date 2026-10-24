@@ -19,7 +19,7 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
 - **터미널 + 파일 트리** — 터미널이 앱 안에 있고, Claude 에게 「○○ 코드 열어줘」 라고 하면 그 파일이 트리와 뷰어에 열립니다.
   파일 이름·경로 검색도 됩니다. 앱을 다시 켜면 열려 있던 Claude 대화를 이어서 열 수 있습니다.
 - **처음 켜지는 위젯** — 새 워크스페이스는 이 컴퓨터에서 바로 쓸 수 있는 위젯만 켜고 시작합니다.
-  폴더가 GitHub 레포이고 `gh` 에 로그인돼 있으면 그 레포의 PR 위젯, git 레포면 워크트리, 그리고 항상 Claude 한도·세션 복원.
+  폴더가 GitHub 레포이고 `gh` 에 로그인돼 있으면 그 레포의 PR 위젯, git 레포면 워크트리, 그리고 항상 오늘 할 일·Claude 한도·세션 복원.
   Linear · Notion · 배포 · QA 처럼 계정이나 설정이 필요한 위젯은 꺼진 채로 「위젯 관리」에 있고,
   설정이 덜 된 위젯은 오류 대신 무엇을 넣으면 되는지 알려 줍니다.
 - **켜고 끄는 위젯**
@@ -27,6 +27,7 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
   - Linear 내 이슈(할 일 → 진행 중 → 리뷰·확인 중으로 묶음), Linear 알림(나를 부르거나 내가 담당인 것만), Notion 명세 —
     Claude Code 에 이미 연결한 커넥터를 읽기 전용 도구로만 씁니다. 토큰을 따로 발급하지 않아도 됩니다.
   - 배포·스왑 대기, 워크트리 상태, QA 실행, Claude 한도·로그인, 세션 복원
+  - 오늘 할 일: 적고 체크, 끝낸 항목은 다음 날 정리
   - 직접 만드는 위젯 (여러 개 추가 가능): **명령 출력**(셸 없이 실행), **링크 모음**, **폴더 문서**(최근 수정 순, 누르면 기본 앱으로 열기)
   - 문서 위젯(폴더 문서·Notion 명세·QA 보고서)에는 검색창이 있습니다
   - 「Claude 에게 추천받기」 에 원하는 것을 적으면 맞는 위젯을 골라 줍니다 (Claude 는 도구 없이 추천만 합니다)
@@ -105,7 +106,7 @@ a single Windows executable (~13 MB, Wails + the system WebView2) instead of an 
 - **Terminals + file tree** — embedded terminals; files Claude opens for you ("open the X code") appear in the tree and
   viewer. File name/path search, and Claude conversations that were open can be resumed after a restart.
 - **What starts switched on** — a new workspace turns on only the widgets that work on this computer: PR widgets
-  for the folder's GitHub repositories when `gh` is logged in, worktrees for git folders, and always Claude usage and
+  for the folder's GitHub repositories when `gh` is logged in, worktrees for git folders, and always to-dos, Claude usage and
   session restore. Linear, Notion, deploy status and QA need an account or settings, so they wait in widget management;
   a widget that isn't set up yet says what to fill in instead of showing an error.
 - **Toggleable widgets**
@@ -114,6 +115,7 @@ a single Windows executable (~13 MB, Wails + the system WebView2) instead of an 
     own issues), Notion specs — through the connectors you already set up in Claude Code, with read-only tools only.
     No extra API tokens.
   - Deploy/swap status, worktrees, QA runs, Claude usage limits & login, session restore
+  - Today's to-dos: write, tick, finished items are cleared the next day
   - Your own widgets, as many as you like: **command output** (no shell), **links**, **folder documents** (newest first,
     opens with the default app)
   - Document widgets (folder documents, Notion specs, QA reports) have a search box

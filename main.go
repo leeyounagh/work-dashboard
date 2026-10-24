@@ -110,6 +110,7 @@ func main() {
 		Sessions:      sessionStore,
 		Restorable:    restorable,
 		CharactersDir: filepath.Join(filepath.Dir(dir), "characters"),
+		TodosDir:      filepath.Join(filepath.Dir(dir), "todos"),
 		Claude:        claudeacct.New(claudeacct.Options{}),
 		RunDir:        runDir,
 		OpenPath:      openWithDefaultApp,

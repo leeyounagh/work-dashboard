@@ -315,3 +315,13 @@ body.resizing-col .tab-pane, body.resizing-row .tab-pane, body.resizing-col canv
 /* Terminals undo the UI zoom (xterm maps the mouse wrongly under CSS zoom);
    their font size follows the zoom instead. */
 .term-pane { zoom: calc(1 / var(--ui-zoom, 1)); }
+.todo-add { margin-bottom: 6px; }
+.todo-add .field { width: 100%; }
+.todo-list { display: flex; flex-direction: column; gap: 2px; }
+.todo-item { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
+.todo-item:hover { background: var(--panel-raised); }
+.todo-item input { flex-shrink: 0; }
+.todo-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.todo-item.done .todo-text { color: var(--text-muted); text-decoration: line-through; }
+.todo-delete { padding: 0 6px; visibility: hidden; }
+.todo-item:hover .todo-delete, .todo-delete:focus-visible { visibility: visible; }

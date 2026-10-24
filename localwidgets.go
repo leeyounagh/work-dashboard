@@ -208,6 +208,8 @@ func (a *App) buildLocalWidget(ctx context.Context, ws workspace.Workspace, typ 
 		return linksWidget(s), nil
 	case widget.FolderFiles:
 		return folderFiles(s)
+	case widget.Todo:
+		return a.todoData(ws.ID)
 	default:
 		return PlannedData{Planned: true, Message: typ + " 위젯은 아직 지원하지 않습니다"}, nil
 	}
