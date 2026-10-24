@@ -64,22 +64,25 @@ function image(url: string): HTMLImageElement {
 }
 
 let custom: string[] = [];
+let customGuide = '';
 
 /**
  * Uses the user's own sheets (data URLs from ~/.work-dashboard/characters,
  * same 4×7 layout, any square frame size) instead of the bundled ninjas.
  */
-export function useCustomSheets(urls: string[]): void {
+export function useCustomSheets(urls: string[], guide = ''): void {
   custom = urls;
+  customGuide = guide;
 }
 
-/** The character sheets and the dog, loaded lazily. */
-export function sheets(): { ninjas: HTMLImageElement[]; dog: HTMLImageElement } {
+/** The character sheets, the dog and the user's own guide sheet (if any), loaded lazily. */
+export function sheets(): { ninjas: HTMLImageElement[]; dog: HTMLImageElement; guide?: HTMLImageElement } {
   const entries = Object.entries(files);
   const dog = entries.find(([path]) => path.endsWith('/dog.png'))?.[1] ?? '';
   const bundled = entries.filter(([path]) => !path.endsWith('/dog.png')).map(([, url]) => url);
   return {
     ninjas: (custom.length ? custom : bundled).map(image),
     dog: image(dog),
+    ...(customGuide ? { guide: image(customGuide) } : {}),
   };
 }

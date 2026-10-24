@@ -9,7 +9,7 @@ import {widget} from '../models';
 
 export function ClaudeStatus():Promise<main.ClaudeUsageData>;
 
-export function CustomSprites():Promise<Array<string>>;
+export function CustomSprites():Promise<main.Sprites>;
 
 export function DeleteWorkspace(arg1:string):Promise<void>;
 

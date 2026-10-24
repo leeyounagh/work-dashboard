@@ -116,11 +116,12 @@ function startOffice(
   };
   panel.onChange(refresh);
   panel.onInterrupt((termId) => office.event(termId, { event: 'Interrupt' }));
-  // The user's own characters (~/.work-dashboard/characters), if any.
+  // The user's own characters (~/.work-dashboard/characters), if any;
+  // guide.png there is the office guide.
   CustomSprites()
-    .then((urls) => {
-      if (urls?.length) {
-        useCustomSheets(urls);
+    .then((sprites) => {
+      if (sprites?.characters?.length || sprites?.guide) {
+        useCustomSheets(sprites.characters ?? [], sprites.guide);
         office.reloadArt();
       }
     })

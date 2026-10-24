@@ -48,7 +48,7 @@ Electron 앱 대신 Windows 실행 파일 하나(약 13 MB, Wails + 시스템 We
 사무실은 CC0 Ninja Adventure 캐릭터를 씁니다. 쓸 권리가 있는 다른 그림을 쓰려면
 `~/.work-dashboard/characters/*.png` 에 스프라이트 시트를 넣으세요 (아래/위/왼쪽/오른쪽 4열 × 7행의 정사각 프레임,
 0–3행 걷기, 4행 책상 작업 동작 — 16×16 이면 64×112, 프레임 크기는 자유, 파일당 512 KB 이하).
-파일은 내 컴퓨터에만 있고, 넣으면 Claude 캐릭터와 가이드가 그 그림으로 바뀝니다.
+파일은 내 컴퓨터에만 있고, 넣으면 Claude 캐릭터가 그중에서 랜덤으로 나옵니다. `guide.png` 는 사무실 가이드가 됩니다.
 
 ### 개발
 
@@ -111,7 +111,7 @@ Set `WD_DATA_DIR=<absolute path>` to use another data folder (demos, screenshots
 The office uses the CC0 Ninja Adventure characters. To use other art you are allowed to use, put sprite sheets in
 `~/.work-dashboard/characters/*.png` (4 columns down/up/left/right × 7 rows of square frames, rows 0–3 walking,
 row 4 working at a desk — 64×112 for 16×16 frames, any frame size works, up to 512 KB each). They stay on your
-computer and replace the Claude characters and the guide.
+computer; each Claude session gets one of them, and `guide.png` becomes the office guide.
 
 ### Develop
 

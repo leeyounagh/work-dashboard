@@ -63,22 +63,27 @@ func TestCustomSprites(t *testing.T) {
 	h.app.deps.CharactersDir = dir
 	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
 	for name, data := range map[string][]byte{
-		"a.png":    png,
-		"b.PNG":    png,
-		"fake.png": []byte("not a png"),
-		"big.png":  append(png, make([]byte, maxSpriteBytes)...),
-		"note.txt": png,
+		"a.png":     png,
+		"b.PNG":     png,
+		"Guide.png": png,
+		"fake.png":  []byte("not a png"),
+		"big.png":   append(png, make([]byte, maxSpriteBytes)...),
+		"note.txt":  png,
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	got := h.app.CustomSprites()
-	if len(got) != 2 || !strings.HasPrefix(got[0], "data:image/png;base64,") {
-		t.Fatalf("CustomSprites = %d items", len(got))
+	if len(got.Characters) != 2 || !strings.HasPrefix(got.Characters[0], "data:image/png;base64,") {
+		t.Fatalf("CustomSprites = %d characters", len(got.Characters))
+	}
+	// guide.png is the office guide, not one of the characters.
+	if !strings.HasPrefix(got.Guide, "data:image/png;base64,") {
+		t.Fatalf("guide = %.30q", got.Guide)
 	}
 	h.app.deps.CharactersDir = filepath.Join(dir, "missing")
-	if got := h.app.CustomSprites(); len(got) != 0 {
+	if got := h.app.CustomSprites(); len(got.Characters) != 0 || got.Guide != "" {
 		t.Fatal("missing folder means no custom sprites")
 	}
 }

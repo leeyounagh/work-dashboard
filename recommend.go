@@ -172,9 +172,18 @@ const (
 
 var pngMagic = []byte("\x89PNG\r\n\x1a\n")
 
-// CustomSprites returns the user's own character sheets as data URLs.
-func (a *App) CustomSprites() []string {
-	out := []string{}
+// Sprites are the user's own sheets as data URLs: the Claude characters and,
+// from guide.png, the office guide ("" = the guide uses a character's sheet).
+type Sprites struct {
+	Characters []string `json:"characters"`
+	Guide      string   `json:"guide"`
+}
+
+const guideSprite = "guide.png"
+
+// CustomSprites returns the user's own character sheets.
+func (a *App) CustomSprites() Sprites {
+	out := Sprites{Characters: []string{}}
 	if a.unlocked() != nil || a.deps.CharactersDir == "" {
 		return out
 	}
@@ -190,7 +199,7 @@ func (a *App) CustomSprites() []string {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		if len(out) == maxSprites {
+		if len(out.Characters) == maxSprites {
 			break
 		}
 		path := filepath.Join(a.deps.CharactersDir, name)
@@ -201,7 +210,12 @@ func (a *App) CustomSprites() []string {
 		if err != nil || len(data) > maxSpriteBytes || len(data) < len(pngMagic) || string(data[:len(pngMagic)]) != string(pngMagic) {
 			continue
 		}
-		out = append(out, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(data))
+		url := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+		if strings.EqualFold(name, guideSprite) {
+			out.Guide = url
+			continue
+		}
+		out.Characters = append(out.Characters, url)
 	}
 	return out
 }

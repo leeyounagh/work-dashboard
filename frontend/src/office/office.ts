@@ -97,7 +97,8 @@ export class Office {
 
   private newGuide(): Character {
     const term: OfficeTerminal = { id: GUIDE_ID, title: '가이드', workspace: '', workspaceId: '', kind: 'claude', alive: true };
-    const sheet = this.art.ninjas.at(-1) ?? this.art.dog;
+    // The user's guide.png, else the last character sheet.
+    const sheet = this.art.guide ?? this.art.ninjas.at(-1) ?? this.art.dog;
     return {
       term,
       state: { mood: 'idle', tool: '', since: 0 },

@@ -297,6 +297,20 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class Sprites {
+	    characters: string[];
+	    guide: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Sprites(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.characters = source["characters"];
+	        this.guide = source["guide"];
+	    }
+	}
 	export class WidgetResult {
 	    type: string;
 	    data?: any;
