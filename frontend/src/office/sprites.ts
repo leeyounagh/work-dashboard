@@ -33,6 +33,9 @@ export function frameRect(dir: Direction, row: number, frame = FRAME): { sx: num
 /** CSS px a character is drawn at: 16px pixel art ×3, detailed (larger) frames bigger. */
 export const drawSize = (frame: number) => (frame > FRAME ? 80 : FRAME * 3);
 
+/** How far (px) an idle character floats up and down: only the small pixel art; drawn sheets would look like they hop. */
+export const bobHeight = (frame: number) => (frame > FRAME ? 0 : 3);
+
 /** Frame size of a sheet: 4 columns wide, so your own sheets may use larger frames. */
 export const frameSize = (sheetWidth: number) => (sheetWidth > 0 ? sheetWidth / 4 : FRAME);
 

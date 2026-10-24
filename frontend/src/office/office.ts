@@ -1,6 +1,6 @@
 import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
 import { drawDesk, drawRoom, drawRug } from './background';
-import { ACTION_ROW, FRAME, WALK_FRAMES, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect, sheets, type Direction } from './sprites';
+import { ACTION_ROW, FRAME, WALK_FRAMES, bobHeight, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect, sheets, type Direction } from './sprites';
 
 /** A terminal as the office sees it. */
 export interface OfficeTerminal {
@@ -369,8 +369,9 @@ export class Office {
     const { ctx } = this;
     const moving = Math.hypot(c.tx - c.x, c.ty - c.y) > 1;
     const atDesk = !moving && c.state.mood !== 'idle';
-    // Idle characters float gently.
-    const bob = !moving && !atDesk && c.pose === null ? Math.round(Math.sin(now / 400 + c.phase) * 3) : 0;
+    // Idle pixel-art characters float gently.
+    const lift = bobHeight(c.dog || !c.sheet.naturalWidth ? FRAME : frameSize(c.sheet.naturalWidth));
+    const bob = !moving && !atDesk && c.pose === null ? Math.round(Math.sin(now / 400 + c.phase) * lift) : 0;
     const size = this.sizeOf(c);
     const x = Math.round(c.x - size / 2);
     const y = Math.round(c.y - size + bob);
