@@ -122,6 +122,8 @@ func main() {
 		Windows:    &windows.Options{Theme: windows.Dark, IsZoomControlEnabled: false, ZoomFactor: 1.0},
 		OnStartup:  app.startup,
 		OnShutdown: app.shutdown,
+		// Files dropped on a terminal are typed in as paths (frontend/src/terminal/fileDrop.ts).
+		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
 		SingleInstanceLock: &options.SingleInstanceLock{
 			// Dev builds use their own id so `wails dev` never blocks the installed app.
 			UniqueId: instanceID(),

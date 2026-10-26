@@ -3,7 +3,8 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 
 import { OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
-import { ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
+import { CanResolveFilePaths, ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
+import { carriesFiles, droppedPathsText } from './fileDrop';
 import { clipboardAction } from './clipboard';
 import { bridgeHangulInput } from './hangulInput';
 import { isMac } from '../lib/platform';
@@ -26,6 +27,10 @@ interface Session extends TerminalInfo {
   term: Terminal;
   fit: FitAddon;
   pane: HTMLElement;
+}
+
+interface WailsRuntime {
+  runtime: { ResolveFilePaths(x: number, y: number, files: File[]): void };
 }
 
 interface TermData {
@@ -62,6 +67,10 @@ export class TerminalPanel {
   // Late events for tabs the user already closed are dropped, not buffered.
   private readonly closed = new Set<string>();
 
+  // The terminal a file drop landed on, until Wails reports the file paths.
+  private dropTarget: string | undefined;
+  private readonly dropListeners = new AbortController();
+
   constructor(
     private readonly tabs: TabHost,
     private readonly body: HTMLElement,
@@ -70,9 +79,65 @@ export class TerminalPanel {
     this.unsubscribe = [
       EventsOn('term:data', (ev: TermData) => this.handleData(ev)),
       EventsOn('term:exit', (ev: TermExit) => this.handleExit(ev)),
+      EventsOn('wails:file-drop', (x: number, y: number, paths: string[]) => this.handleFileDrop(x, y, paths)),
     ];
     this.resizeObserver = new ResizeObserver(() => this.fitActive());
     this.resizeObserver.observe(body);
+    this.wireFileDrop();
+  }
+
+  /**
+   * Files dropped on a terminal are typed in as paths. The web view does not
+   * expose a dropped file's path, so on Windows the files go to Wails, which
+   * answers with a wails:file-drop event; macOS and Linux send that event
+   * natively.
+   */
+  private wireFileDrop() {
+    const { signal } = this.dropListeners;
+    this.body.addEventListener(
+      'dragover',
+      (e) => {
+        if (!carriesFiles(e) || !this.activeSession()?.alive) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      },
+      { signal },
+    );
+    this.body.addEventListener(
+      'drop',
+      (e) => {
+        const s = this.activeSession();
+        if (!carriesFiles(e) || !s?.alive) return;
+        e.preventDefault();
+        const files = [...(e.dataTransfer?.files ?? [])];
+        if (!files.length || !CanResolveFilePaths()) return;
+        this.dropTarget = s.id;
+        // The generated ResolveFilePaths wrapper drops x and y, so call the runtime directly.
+        (window as unknown as WailsRuntime).runtime.ResolveFilePaths(Math.round(e.clientX), Math.round(e.clientY), files);
+      },
+      { signal },
+    );
+  }
+
+  private handleFileDrop(x: number, y: number, paths: string[]) {
+    const id = this.dropTarget;
+    this.dropTarget = undefined;
+    // Without a drop seen here (macOS, Linux), only a drop inside the terminal area counts.
+    const s = id ? this.sessions.get(id) : this.inBody(x, y) ? this.activeSession() : undefined;
+    const text = droppedPathsText(paths, !navigator.userAgent.includes('Windows'));
+    if (!s?.alive || !text) return;
+    s.term.paste(text);
+    s.term.focus();
+  }
+
+  private inBody(x: number, y: number): boolean {
+    const r = this.body.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  private activeSession(): Session | undefined {
+    const id = this.tabs.activeId;
+    return id ? this.sessions.get(id) : undefined;
   }
 
   /**
@@ -299,8 +364,7 @@ export class TerminalPanel {
   }
 
   private fitActive() {
-    const id = this.tabs.activeId;
-    const s = id ? this.sessions.get(id) : undefined;
+    const s = this.activeSession();
     if (s) this.fit(s);
   }
 
@@ -326,6 +390,7 @@ export class TerminalPanel {
   dispose(): void {
     for (const off of this.unsubscribe) off();
     this.resizeObserver.disconnect();
+    this.dropListeners.abort();
     for (const s of this.sessions.values()) s.term.dispose();
     this.sessions.clear();
   }

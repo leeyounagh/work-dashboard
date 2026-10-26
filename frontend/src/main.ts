@@ -52,6 +52,7 @@ import { markNewWorkspace } from './widgets/onboarding';
 import type { TodoItem } from './widgets/todo';
 import { useCustomSheets } from './office/sprites';
 import { mountSplitters } from './layout/splitters';
+import { blockStrayFileDrops } from './terminal/fileDrop';
 import { TabHost } from './tabs/tabHost';
 import { TerminalPanel, type TerminalKind } from './terminal/panel';
 import { renderSidebar, type SidebarHandlers, type SidebarState } from './workspaces/sidebar';
@@ -392,6 +393,8 @@ async function restoreSessions(panel: TerminalPanel, list: Workspace[]) {
 async function start() {
   const stopSplitters = mountSplitters(byId('app'));
   import.meta.hot?.dispose(stopSplitters);
+  // Files go into terminals only; dropped anywhere else they must not open in the window.
+  import.meta.hot?.dispose(blockStrayFileDrops(window));
   let selection: Selection = { workspace: null, dirty: false };
   const editorBody = byId('editor-body');
   const emptyNote = byId('editor-empty');
