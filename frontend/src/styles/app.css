@@ -19,7 +19,9 @@ body {
     'side gl floor gr widgets'
     'side gl gh gr widgets'
     'side gl terminal gr widgets';
-  height: 100vh;
+  /* Not 100vh: under the UI zoom (zoom.ts) vh is scaled too, which pushed
+     the bottom of the terminal, where you type, off the window. */
+  height: 100%;
   padding: var(--gap);
 }
 
