@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -85,6 +86,29 @@ func TestCustomSprites(t *testing.T) {
 	h.app.deps.CharactersDir = filepath.Join(dir, "missing")
 	if got := h.app.CustomSprites(); len(got.Characters) != 0 || got.Guide != "" {
 		t.Fatal("missing folder means no custom sprites")
+	}
+}
+
+func TestCustomSpritesCapKeepsGuide(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	h.app.deps.CharactersDir = dir
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
+	// More sheets than the cap, all sorting before guide.png.
+	for i := 0; i < maxSprites+10; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%04d.png", i)), png, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "guide.png"), png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := h.app.CustomSprites()
+	if len(got.Characters) != maxSprites {
+		t.Fatalf("CustomSprites = %d characters, want %d", len(got.Characters), maxSprites)
+	}
+	if got.Guide == "" {
+		t.Fatal("the guide is dropped once the character cap is reached")
 	}
 }
 
