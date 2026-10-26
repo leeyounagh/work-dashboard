@@ -176,3 +176,20 @@ func TestNeedsApprovalWhenNoReviewHighlightIsOff(t *testing.T) {
 		t.Fatalf("highlights = %v", d.Items[0].Highlights)
 	}
 }
+
+// A newer review-gate verdict replaces the older one, even a Warning after a
+// Block (the blocking findings were fixed), unlike a plain comment.
+func TestReviewersReviewGateVerdictReplacesEarlierOne(t *testing.T) {
+	pr := github.PR{Author: "me", Reviews: []github.Review{
+		{Author: "rev", State: "CHANGES_REQUESTED", SubmittedAt: t0.Add(-3 * time.Hour), Gate: true},
+		{Author: "rev", State: "COMMENTED", SubmittedAt: t0.Add(-1 * time.Hour), Gate: true},
+	}}
+	got := Reviewers(pr)
+	if len(got) != 1 || got[0].State != "COMMENTED" {
+		t.Fatalf("Reviewers = %+v", got)
+	}
+	d := BuildPRReviews([]github.PR{pr}, Settings{})
+	if slices.Contains(d.Items[0].Highlights, "no-review") || d.Summary.NoReview != 0 {
+		t.Fatalf("a review-gate comment is a review: %+v", d.Items[0].Highlights)
+	}
+}

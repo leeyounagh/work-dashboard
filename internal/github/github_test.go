@@ -26,6 +26,12 @@ const fixture = `{"data":{"search":{"nodes":[
   "createdAt":"2026-10-22T01:00:00Z","updatedAt":"2026-10-22T01:00:00Z","reviewDecision":null,
   "author":{"login":"me"},"repository":{"nameWithOwner":"o/r"},"baseRefName":"main","headRefName":"y",
   "reviewRequests":{"nodes":[]},"reviews":{"nodes":[]},
+  "comments":{"nodes":[
+    {"author":{"login":"rev"},"createdAt":"2026-10-22T02:00:00Z","body":"리뷰 회차: 1\n\n<!-- review-gate verdict=Block -->\n**결과:** Block"},
+    {"author":{"login":"pm"},"createdAt":"2026-10-22T03:00:00Z","body":"PM 결정: B 로 갑니다"},
+    {"author":{"login":"rev"},"createdAt":"2026-10-22T04:00:00Z","body":"<!--review-gate verdict=Warning-->"},
+    {"author":{"login":"rev"},"createdAt":"2026-10-22T05:00:00Z","body":"<!-- review-gate verdict=Approve -->"},
+    {"author":{"login":"rev"},"createdAt":"2026-10-22T06:00:00Z","body":"<!-- review-gate verdict=Maybe -->"}]},
   "commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]}},
  {}
 ]}}}`
@@ -76,6 +82,32 @@ func TestSearch(t *testing.T) {
 	}
 	if prs[1].ChecksState != "" || !prs[1].Draft {
 		t.Fatalf("pr 13 = %+v", prs[1])
+	}
+}
+
+// Reviews posted as PR comments by the review-gate tool count as reviews;
+// other comments do not.
+func TestSearchReviewGateComments(t *testing.T) {
+	var args []string
+	prs, err := Search(context.Background(), fakeRunner(fixture, nil, &args), "q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := prs[1].Reviews
+	want := []string{"CHANGES_REQUESTED", "COMMENTED", "APPROVED"}
+	if len(got) != len(want) {
+		t.Fatalf("reviews = %+v", got)
+	}
+	for i, r := range got {
+		if r.State != want[i] || r.Author != "rev" || !r.Gate {
+			t.Fatalf("review %d = %+v, want %s from rev", i, r, want[i])
+		}
+	}
+	if got[0].SubmittedAt.Hour() != 2 {
+		t.Fatalf("submittedAt = %v, want the comment time", got[0].SubmittedAt)
+	}
+	if prs[0].Reviews[0].Gate {
+		t.Fatal("a real review is not a review-gate comment")
 	}
 }
 
