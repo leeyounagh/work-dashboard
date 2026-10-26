@@ -157,7 +157,7 @@ func (a *App) RecommendWidgets(workspaceID, request string) ([]Recommendation, e
 // this computer, so the user can use art they may not redistribute.
 const (
 	maxSpriteBytes = 512 << 10
-	maxSprites     = 40
+	maxSprites     = 64
 )
 
 var pngMagic = []byte("\x89PNG\r\n\x1a\n")
@@ -189,8 +189,9 @@ func (a *App) CustomSprites() Sprites {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		if len(out.Characters) == maxSprites {
-			break
+		isGuide := strings.EqualFold(name, guideSprite)
+		if len(out.Characters) == maxSprites && !isGuide {
+			continue // keep looking: guide.png may sort after the cap
 		}
 		path := filepath.Join(a.deps.CharactersDir, name)
 		if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() || info.Size() > maxSpriteBytes {
@@ -201,7 +202,7 @@ func (a *App) CustomSprites() Sprites {
 			continue
 		}
 		url := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
-		if strings.EqualFold(name, guideSprite) {
+		if isGuide {
 			out.Guide = url
 			continue
 		}
