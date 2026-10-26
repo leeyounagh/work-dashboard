@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
 import { ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
 import { clipboardAction } from './clipboard';
+import { bridgeHangulInput } from './hangulInput';
 import { isMac } from '../lib/platform';
 import { base64ToBytes } from '../lib/workspaceDraft';
 import type { TabHost } from '../tabs/tabHost';
@@ -167,6 +168,11 @@ export class TerminalPanel {
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.open(pane);
+      // macOS WebKit gets no composition events from the Korean IME (see hangulInput.ts).
+      if (isMac()) {
+        const t = term;
+        bridgeHangulInput(pane, (data) => t.input(data, true));
+      }
       fit.fit();
 
       const info = await launch(term.cols, term.rows);
