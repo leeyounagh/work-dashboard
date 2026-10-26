@@ -37,6 +37,8 @@ type Review struct {
 	Author      string    `json:"author"`
 	State       string    `json:"state"` // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED
 	SubmittedAt time.Time `json:"submittedAt"`
+	// Gate marks a review posted as a PR comment by the review-gate tool.
+	Gate bool `json:"gate,omitempty"`
 }
 
 // Check is one CI check or commit status.
@@ -76,6 +78,7 @@ const searchQuery = `query($q: String!) {
         baseRefName headRefName
         reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Bot { login } ... on Team { name } } } }
         reviews(last: 100) { nodes { author { login } state submittedAt } }
+        comments(last: 100) { nodes { author { login } createdAt body } }
         commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 100) { nodes {
           ... on CheckRun { name conclusion status detailsUrl }
           ... on StatusContext { context state targetUrl }
@@ -127,6 +130,13 @@ type gqlPR struct {
 			SubmittedAt time.Time `json:"submittedAt"`
 		} `json:"nodes"`
 	} `json:"reviews"`
+	Comments struct {
+		Nodes []struct {
+			Author    *login    `json:"author"`
+			CreatedAt time.Time `json:"createdAt"`
+			Body      string    `json:"body"`
+		} `json:"nodes"`
+	} `json:"comments"`
 	Commits struct {
 		Nodes []struct {
 			Commit struct {
@@ -152,6 +162,16 @@ type gqlPR struct {
 var failedConclusions = map[string]bool{
 	"FAILURE": true, "ERROR": true, "TIMED_OUT": true, "CANCELLED": true,
 	"ACTION_REQUIRED": true, "STARTUP_FAILURE": true,
+}
+
+// Some teams review with a tool that posts a PR comment carrying
+// <!-- review-gate verdict=Block|Warning|Approve --> instead of a GitHub review.
+var gateMark = regexp.MustCompile(`<!--\s*review-gate verdict=(\w+)\s*-->`)
+
+var gateStates = map[string]string{
+	"Block":   "CHANGES_REQUESTED",
+	"Warning": "COMMENTED",
+	"Approve": "APPROVED",
 }
 
 func (l *login) name() string {
@@ -181,6 +201,13 @@ func convert(n gqlPR) PR {
 	}
 	for _, r := range n.Reviews.Nodes {
 		pr.Reviews = append(pr.Reviews, Review{Author: r.Author.name(), State: r.State, SubmittedAt: r.SubmittedAt})
+	}
+	for _, c := range n.Comments.Nodes {
+		m := gateMark.FindStringSubmatch(c.Body)
+		if m == nil || gateStates[m[1]] == "" {
+			continue
+		}
+		pr.Reviews = append(pr.Reviews, Review{Author: c.Author.name(), State: gateStates[m[1]], SubmittedAt: c.CreatedAt, Gate: true})
 	}
 	if len(n.Commits.Nodes) > 0 && n.Commits.Nodes[0].Commit.StatusCheckRollup != nil {
 		roll := n.Commits.Nodes[0].Commit.StatusCheckRollup

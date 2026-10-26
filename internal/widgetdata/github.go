@@ -56,8 +56,9 @@ func Reviewers(pr github.PR) []ReviewerStatus {
 		if !seen {
 			order = append(order, key)
 		}
-		// A comment after a decision does not undo the decision.
-		if r.State == "COMMENTED" && seen && decisive(cur.State) {
+		// A comment after a decision does not undo the decision; a newer
+		// review-gate verdict does (its Warning means the blockers were fixed).
+		if r.State == "COMMENTED" && !r.Gate && seen && decisive(cur.State) {
 			continue
 		}
 		latest[key] = ReviewerStatus{Login: r.Author, State: r.State, At: r.SubmittedAt}
