@@ -74,6 +74,13 @@ func main() {
 		log.Printf("work-dashboard: session history unavailable: %v", err)
 	}
 
+	// The user's own preferences (e.g. Claude's permission mode); a bad file
+	// is logged and ignored rather than stopping the app.
+	settings, err := launch.LoadSettings(filepath.Join(filepath.Dir(dir), "settings.json"))
+	if err != nil {
+		log.Printf("work-dashboard: %v", err)
+	}
+
 	var app *App
 	// The bridge must exist before the app so sessions can be configured with
 	// its URL; its handlers reach the app once it is created below.
@@ -87,13 +94,14 @@ func main() {
 	defer br.Close()
 
 	app = NewApp(Deps{
-		Workspaces:   workspace.NewStore(dir),
-		Start:        term.StartPTY,
-		Emit:         func(ctx context.Context, name string, data any) { runtime.EventsEmit(ctx, name, data) },
-		FindClaude:   func() (string, error) { return exec.LookPath("claude") },
-		Shell:        preferredShell(),
-		NotesDir:     filepath.Join(filepath.Dir(dir), "notes"),
-		NewSessionID: func() string { return uuid.NewString() },
+		Workspaces:           workspace.NewStore(dir),
+		Start:                term.StartPTY,
+		Emit:                 func(ctx context.Context, name string, data any) { runtime.EventsEmit(ctx, name, data) },
+		FindClaude:           func() (string, error) { return exec.LookPath("claude") },
+		ClaudePermissionMode: settings.ClaudePermissionMode,
+		Shell:                preferredShell(),
+		NotesDir:             filepath.Join(filepath.Dir(dir), "notes"),
+		NewSessionID:         func() string { return uuid.NewString() },
 		PickFolder: func(ctx context.Context) (string, error) {
 			return runtime.OpenDirectoryDialog(ctx, runtime.OpenDialogOptions{Title: "워크스페이스에 추가할 폴더"})
 		},

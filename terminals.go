@@ -61,6 +61,7 @@ func (a *App) startClaude(workspaceID string, opts launch.ClaudeOptions, cols, r
 		return term.Info{}, err
 	}
 	opts.Exe, opts.NotesFile = exe, notes
+	opts.PermissionMode = a.deps.ClaudePermissionMode
 	return a.openClaude(ws.ID, opts, ws.Folders, ws.Name, cols, rows)
 }
 
