@@ -47,6 +47,15 @@ macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 
   진행률과 지금 쓰는 도구가 머리 위에 보이고, 누르면 그 터미널로 갑니다.
   오른쪽 아래 **가이드** 를 누르면 워크스페이스 기술(go.mod, package.json, pubspec.yaml … 을 보고 판단)에 맞는
   기술 블로그를 엽니다. 사이드바의 「가이드 주제」 로 직접 정할 수 있고, 찾지 못하면 AI 관련 사이트를 엽니다.
+- **사용량에 따라 바뀌는 사무실**
+  - 5시간 한도: 50% 부터 해가 지고, 90% 를 넘으면 책상 스탠드가 켜집니다(야근 모드). 오른쪽 벽 커피포트가 줄어들다
+    비면 쉬는 캐릭터들이 「커피…」 하며 줄을 서고, 한도가 초기화되면 아침 햇살이 듭니다.
+  - 7일 한도: 60% 부터 화분이 시들고, 85% 를 넘으면 갈색이 되어 잎이 떨어집니다.
+  - 세션 토큰: 1만 토큰마다 책상에 서류가 쌓이고(최대 8장), 10만부터 커피잔이 늘고 땀을 흘립니다.
+    10만 · 50만 · 100만에서 폭죽과 🏆 가 터지고, 왼쪽 벽 「오늘의 MVP」 액자에 가장 많이 쓴 터미널이 걸립니다.
+  - 이번 주 누적: 50만이면 책장, 300만이면 소파, 1,000만이면 수족관이 생깁니다.
+  - 토큰은 입력 + 캐시 쓰기 + 출력이고 캐시 읽기는 뺍니다(매 턴 대화 전체를 다시 읽는 양이라 너무 커서).
+    이어서 연 세션은 대시보드가 연 뒤부터 셉니다.
 - **화면 확대** — Ctrl + / Ctrl − / Ctrl 0 (배율은 기억됩니다), 패널 폭은 드래그로 조절합니다.
 
 ### 구동 원리
@@ -66,6 +75,8 @@ macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 
 - **터미널** — Go 가 Windows 가상 콘솔(ConPTY)로 `claude --add-dir … --session-id …` 를 실행하고, 출력은 xterm.js 화면으로 보냅니다.
 - **사무실** — Claude 를 띄울 때 훅을 이 PC 의 작은 서버(127.0.0.1, 세션별 토큰)로 보내도록 설정해 두고,
   도구 사용 · 대기 · 완료 신호에 맞춰 캐릭터를 움직입니다. 「코드 열어줘」 는 같은 서버의 `open_files` MCP 도구로 파일 트리에 열립니다.
+  토큰 수는 훅이 알려 주는 세션 대화 기록(`~/.claude/projects/…/<session>.jsonl`)을 이어 읽어 셉니다.
+  한도 사용률은 「Claude 한도」 위젯과 같은 값을 2분마다 받아 씁니다.
 - **위젯** — 화면이 3분마다 Go 에 데이터를 요청하면, Go 가 `gh`(PR) · `git`(워크트리) · 파일(문서) ·
   `claude -p`(리니어 · 노션, 기본 도구 없이 읽기 전용 커넥터 도구만)로 가져옵니다.
 - **저장 · 통신** — 설정은 각자 PC 의 JSON 파일이고 서버 · 계정 · 토큰 저장이 없습니다. 바깥 통신은 사용자가 로그인해 둔 `gh` 와 `claude` 를 빌려 쓰는 것뿐입니다.
@@ -78,7 +89,8 @@ macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 
 ### 내 데이터
 
 이 레포에는 개인 정보가 없습니다. 워크스페이스와 설정은 사용자별로 `~/.work-dashboard/` 에 저장됩니다
-(`workspaces/<id>.json`, `notes/<id>.md`). 토큰은 저장하지 않습니다.
+(`workspaces/<id>.json`, `notes/<id>.md`, 사무실용 날짜별 토큰 사용량 `tokens.json` — 최근 14일).
+로그인 토큰 · API 키는 저장하지 않습니다.
 `WD_DATA_DIR=<절대 경로>` 로 다른 데이터 폴더를 쓸 수 있습니다 (데모·스크린샷용).
 
 ### 내 캐릭터 쓰기
@@ -149,6 +161,16 @@ On macOS the shortcuts use **Cmd** instead of Ctrl (zoom Cmd +/−/0, terminal c
   progress and the current tool above its head; click it to jump to its terminal. Click the **guide** (bottom right)
   for a tech blog matching the workspace (detected from go.mod, package.json, pubspec.yaml, …, or set by the workspace's
   guide topics), or an AI site when nothing matches.
+- **An office that follows your usage**
+  - 5-hour limit: dusk from 50%, desk lamps from 90% (working late). The coffee pot on the right wall drains, and when
+    it is empty idle characters queue at it ("커피…"); a limit reset brings the morning sun.
+  - 7-day limit: the plants wilt from 60% and turn brown, dropping leaves, from 85%.
+  - Session tokens: paper piles up on the desk every 10K tokens (up to 8 sheets); from 100K coffee cups appear and the
+    character sweats. 100K, 500K and 1M set off confetti and a 🏆, and the "오늘의 MVP" frame on the left wall shows
+    the terminal that used the most.
+  - This week's total: a bookshelf at 500K, a sofa at 3M, an aquarium at 10M.
+  - Tokens are input + cache writes + output; cache reads are left out (every turn re-reads the whole conversation,
+    which would dwarf the rest). A resumed session counts from when the dashboard opened it.
 - **Zoom** — Ctrl + / Ctrl − / Ctrl 0 (remembered); drag the panel edges to resize.
 
 ### How it works
@@ -169,6 +191,8 @@ the same executable.
 - **Terminals** — Go runs `claude --add-dir … --session-id …` in a Windows pseudo console (ConPTY) and streams it to xterm.js.
 - **Office** — Claude is started with hooks that post to a small local server (127.0.0.1, per-session tokens); tool
   use, waiting and done move the characters. "Open that code" goes through the same server's `open_files` MCP tool.
+  Token counts come from reading on through the session transcript the hooks point to
+  (`~/.claude/projects/…/<session>.jsonl`); the limit percentages are the Claude usage widget's, fetched every 2 minutes.
 - **Widgets** — every 3 minutes the UI asks Go, which reads `gh` (PRs), `git` (worktrees), files (documents) or
   `claude -p` (Linear, Notion — no built-in tools, read-only connector tools only).
 - **Storage & network** — settings are JSON files on your own PC; no server, account or stored tokens. The only outside
@@ -182,7 +206,8 @@ the same executable.
 ### Local data
 
 Nothing personal lives in this repository. Workspaces and settings are stored per user in `~/.work-dashboard/`
-(`workspaces/<id>.json`, `notes/<id>.md`). Tokens are never written there.
+(`workspaces/<id>.json`, `notes/<id>.md`, and `tokens.json` — daily token usage for the office, last 14 days).
+Login tokens and API keys are never written there.
 Set `WD_DATA_DIR=<absolute path>` to use another data folder (demos, screenshots).
 
 ### Your own characters
@@ -213,6 +238,7 @@ cd frontend && npm test
 ```
 main.go, app.go           Wails entry point and the methods bound to the UI
 terminals.go, agents.go   terminals, Claude sessions, hook events
+officetokens.go           session token counts for the office
 widgets.go, localwidgets.go, folderwidget.go, linearfilter.go, recommend.go, guide.go
                           widget data, recommendations, office guide
 internal/widget           widget catalog + setting validation
@@ -223,6 +249,7 @@ internal/bridge           localhost bridge for Claude hooks and the open_files M
 internal/claudeask        headless `claude -p` lookups through connectors
 internal/command          no-shell command runner for the command widget
 internal/files            file tree, viewer, search (kept inside the workspace)
+internal/tokens           transcript token reader + daily totals (tokens.json)
 frontend/                 Vite + TypeScript UI (dark-gray tokens in src/styles/tokens.css)
 ```
 
