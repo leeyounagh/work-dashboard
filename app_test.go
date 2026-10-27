@@ -365,3 +365,23 @@ func TestOpenClaudeReportsBrokenWorkspaceFile(t *testing.T) {
 		t.Fatalf("invalid id should not be reported as not found: %v", err)
 	}
 }
+
+func TestOpenClaudeUsesPermissionModeSetting(t *testing.T) {
+	h := newHarness(t)
+	h.app.deps.ClaudePermissionMode = "bypassPermissions"
+	saved, err := h.app.SaveWorkspace(workspace.Workspace{Name: "gw", Folders: []string{t.TempDir()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.app.OpenClaude(saved.ID, 100, 30); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.specs) == 0 {
+		t.Fatal("no terminal started")
+	}
+	args := h.specs[0].Args
+	i := slices.Index(args, "--permission-mode")
+	if i < 0 || i+1 >= len(args) || args[i+1] != "bypassPermissions" {
+		t.Fatalf("args = %q", args)
+	}
+}

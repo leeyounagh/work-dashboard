@@ -56,6 +56,10 @@ macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 
   - 이번 주 누적: 50만이면 책장, 300만이면 소파, 1,000만이면 수족관이 생깁니다.
   - 토큰은 입력 + 캐시 쓰기 + 출력이고 캐시 읽기는 뺍니다(매 턴 대화 전체를 다시 읽는 양이라 너무 커서).
     이어서 연 세션은 대시보드가 연 뒤부터 셉니다.
+- **쉬는 시간 퀴즈** — 5시간 한도가 50% 미만일 때, 답을 마치고 2분 넘게 쉬는 Claude 세션이 가끔 머리 위 말풍선으로
+  「퀴즈 풀래요?」 하고 묻습니다(한 번 물으면 20분 쉼). **예** 를 누르면 그 세션에서 구현한 내용(토큰을 쓴 세션) 또는
+  알고리즘 4지선다 1문제를 내 달라는 요청이 터미널에 입력되고, Claude 가 문제를 내고 채점합니다(코드는 고치지 않음).
+  터미널에 써 둔 글이 있거나 아직 답한 적 없는 새 탭에는 묻지 않습니다.
 - **화면 확대** — Ctrl + / Ctrl − / Ctrl 0 (배율은 기억됩니다), 패널 폭은 드래그로 조절합니다.
 
 ### 구동 원리
@@ -91,6 +95,9 @@ macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 
 이 레포에는 개인 정보가 없습니다. 워크스페이스와 설정은 사용자별로 `~/.work-dashboard/` 에 저장됩니다
 (`workspaces/<id>.json`, `notes/<id>.md`, 사무실용 날짜별 토큰 사용량 `tokens.json` — 최근 14일).
 로그인 토큰 · API 키는 저장하지 않습니다.
+`settings.json` 은 내 PC 에만 두는 선택 설정입니다. 예를 들어 `{"claudePermissionMode": "bypassPermissions"}` 로 두면
+대시보드에서 여는 Claude 세션이 모두 `--permission-mode bypassPermissions` 로 시작합니다
+(`acceptEdits` · `auto` · `bypassPermissions` · `dontAsk` · `manual` · `plan`). 파일이 없으면 Claude 기본 모드입니다.
 `WD_DATA_DIR=<절대 경로>` 로 다른 데이터 폴더를 쓸 수 있습니다 (데모·스크린샷용).
 
 ### 내 캐릭터 쓰기
@@ -171,6 +178,11 @@ On macOS the shortcuts use **Cmd** instead of Ctrl (zoom Cmd +/−/0, terminal c
   - This week's total: a bookshelf at 500K, a sofa at 3M, an aquarium at 10M.
   - Tokens are input + cache writes + output; cache reads are left out (every turn re-reads the whole conversation,
     which would dwarf the rest). A resumed session counts from when the dashboard opened it.
+- **Quiz breaks** — while the 5-hour limit is under 50%, a Claude session that finished and has been idle for over two
+  minutes sometimes asks "퀴즈 풀래요?" in a speech bubble (at most once every 20 minutes). **예** types a request into
+  its terminal for one multiple-choice question about what the session built (if it used tokens) or an algorithm
+  question; Claude asks and grades it without touching the code. Sessions with text typed in, or new tabs that have
+  not answered yet, are never asked.
 - **Zoom** — Ctrl + / Ctrl − / Ctrl 0 (remembered); drag the panel edges to resize.
 
 ### How it works
@@ -208,6 +220,9 @@ the same executable.
 Nothing personal lives in this repository. Workspaces and settings are stored per user in `~/.work-dashboard/`
 (`workspaces/<id>.json`, `notes/<id>.md`, and `tokens.json` — daily token usage for the office, last 14 days).
 Login tokens and API keys are never written there.
+`settings.json` holds optional preferences that stay on your machine: `{"claudePermissionMode": "bypassPermissions"}`
+starts every Claude session the dashboard opens with `--permission-mode bypassPermissions` (`acceptEdits`, `auto`,
+`bypassPermissions`, `dontAsk`, `manual` or `plan`). Without the file Claude uses its default mode.
 Set `WD_DATA_DIR=<absolute path>` to use another data folder (demos, screenshots).
 
 ### Your own characters
@@ -244,7 +259,7 @@ widgets.go, localwidgets.go, folderwidget.go, linearfilter.go, recommend.go, gui
 internal/widget           widget catalog + setting validation
 internal/workspace        workspace model + JSON store
 internal/term             pseudo-terminal sessions (ConPTY via go-pty)
-internal/launch           workspace → claude / shell command lines
+internal/launch           workspace → claude / shell command lines, settings.json
 internal/bridge           localhost bridge for Claude hooks and the open_files MCP tool
 internal/claudeask        headless `claude -p` lookups through connectors
 internal/command          no-shell command runner for the command widget

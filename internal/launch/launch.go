@@ -27,6 +27,8 @@ type ClaudeOptions struct {
 	MCPConfigFile string // optional --mcp-config file (the dashboard bridge)
 	SettingsFile  string // optional --settings file (bridge hooks)
 	Prompt        string // optional first prompt, e.g. "/qa-2pass ..."
+	// PermissionMode is claude's --permission-mode ("" = claude's own default).
+	PermissionMode string
 }
 
 // ClaudeSpec runs claude in the first folder and adds the others with --add-dir.
@@ -53,6 +55,12 @@ func ClaudeSpec(ws workspace.Workspace, opts ClaudeOptions) (term.Spec, error) {
 	}
 	if opts.SettingsFile != "" {
 		args = append(args, "--settings", opts.SettingsFile)
+	}
+	if opts.PermissionMode != "" {
+		if !validPermissionMode(opts.PermissionMode) {
+			return term.Spec{}, fmt.Errorf("지원하지 않는 권한 모드입니다: %q", opts.PermissionMode)
+		}
+		args = append(args, "--permission-mode", opts.PermissionMode)
 	}
 	if opts.Prompt != "" {
 		// "--" ends the options: --mcp-config takes several values and would

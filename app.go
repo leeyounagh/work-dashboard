@@ -41,6 +41,9 @@ type Deps struct {
 	Emit func(ctx context.Context, name string, data any)
 	// FindClaude resolves the claude executable.
 	FindClaude func() (string, error)
+	// ClaudePermissionMode starts dashboard Claude sessions in this mode
+	// ("" = claude's default), from the user's settings.json.
+	ClaudePermissionMode string
 	// Shell is the interactive shell executable for plain terminals.
 	Shell string
 	// NotesDir holds workspace notes passed to claude.

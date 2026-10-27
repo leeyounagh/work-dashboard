@@ -18,6 +18,8 @@ import {
   sweating,
   type OfficeUsage,
 } from './vibe';
+import { QUIZ_CHANCE, QUIZ_CHECK_MS, QUIZ_GAP_MS, QUIZ_OFFER_MS, canOffer, lowUsage, pickQuizOffer, quizKind, quizQuestion, type QuizKind } from './quiz';
+import { QuizBubble } from './quizBubble';
 import { ACTION_ROW, FRAME, WALK_FRAMES, bobHeight, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect, sheets, type Direction } from './sprites';
 
 /** A terminal as the office sees it. */
@@ -66,6 +68,7 @@ interface Character {
   tokens: number; // this session's tokens since the dashboard opened it
   celebrate: { at: number; label: string } | null; // a token milestone
   wantsCoffee: boolean; // queueing at the empty pot
+  finished: boolean; // Claude finished a reply since the last prompt
 }
 
 const short = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
@@ -91,17 +94,25 @@ export class Office {
   private sunriseAt = -Infinity;
   /** This week's tokens across sessions: earned furniture. */
   private week = 0;
+  /** The quiz offer on screen, and when the office next looks for one. */
+  private readonly quizBubble: QuizBubble;
+  private offer: { id: string; until: number } | null = null;
+  private nextQuizCheck = performance.now() + QUIZ_CHECK_MS;
+  private quietUntil = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly onPick: (termId: string) => void,
     private readonly onGuide: () => void,
+    private readonly onQuiz: (termId: string, kind: QuizKind) => void,
+    private readonly typedSince: (termId: string, since: number) => boolean,
   ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas is not available');
     this.ctx = ctx;
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(canvas);
+    this.quizBubble = new QuizBubble(canvas.parentElement ?? document.body);
     this.resize();
 
     const onClick = (e: MouseEvent) => {
@@ -148,6 +159,7 @@ export class Office {
       tokens: 0,
       celebrate: null,
       wantsCoffee: false,
+      finished: false,
     };
   }
 
@@ -209,6 +221,7 @@ export class Office {
         tokens: 0,
         celebrate: null,
         wantsCoffee: false,
+        finished: false,
       });
     }
   }
@@ -220,7 +233,10 @@ export class Office {
   /** Applies a Claude hook event to its character. */
   event(termId: string, ev: HookInput): void {
     const c = this.chars.get(termId);
-    if (c) c.state = nextState(c.state, ev, performance.now());
+    if (!c) return;
+    c.state = nextState(c.state, ev, performance.now());
+    if (ev.event === 'Stop') c.finished = true;
+    else if (ev.event === 'UserPromptSubmit' || ev.event === 'SessionStart') c.finished = false;
   }
 
   /** New usage limits; a reset of the 5-hour window brings the morning. */
@@ -245,6 +261,7 @@ export class Office {
   destroy(): void {
     cancelAnimationFrame(this.frame);
     this.observer.disconnect();
+    this.quizBubble.destroy();
     for (const off of this.cleanups) off();
   }
 
@@ -361,6 +378,57 @@ export class Office {
         if (busy) c.dir = 'up';
       }
     }
+    this.updateQuiz(now);
+  }
+
+  /**
+   * Now and then, while usage is low, a session idle for a while asks whether
+   * you want a quiz. The offer goes away when it expires or the session works.
+   */
+  private updateQuiz(now: number) {
+    if (this.offer) {
+      const c = this.chars.get(this.offer.id);
+      if (!c || !c.shown || now > this.offer.until || !canOffer(this.quizCandidate(c), now)) this.closeQuiz();
+      else this.quizBubble.move(c.x, this.headTop(c) - 6);
+      return;
+    }
+    if (now < this.nextQuizCheck) return;
+    this.nextQuizCheck = now + QUIZ_CHECK_MS;
+    if (now < this.quietUntil || !lowUsage(this.usage.fiveHour) || Math.random() >= QUIZ_CHANCE) return;
+    const pick = pickQuizOffer(this.visible().map((c) => this.quizCandidate(c)), now, Math.random);
+    const c = pick && this.chars.get(pick.id);
+    if (!c) return;
+    const kind = quizKind(c.tokens, Math.random());
+    const id = c.term.id;
+    this.offer = { id, until: now + QUIZ_OFFER_MS };
+    this.quietUntil = now + QUIZ_GAP_MS;
+    // Stands still while asking, so the bubble stays over it.
+    c.tx = c.x;
+    c.ty = c.y;
+    c.nextWander = this.offer.until;
+    this.quizBubble.show(quizQuestion(kind), c.x, this.headTop(c) - 6, (yes) => {
+      this.offer = null;
+      c.nextWander = performance.now();
+      if (yes) this.onQuiz(id, kind);
+    });
+  }
+
+  private quizCandidate(c: Character) {
+    const { id, kind, alive } = c.term;
+    const typed = this.typedSince(id, c.state.since);
+    return { id, kind, alive, mood: c.state.mood, since: c.state.since, tokens: c.tokens, finished: c.finished, typed };
+  }
+
+  private closeQuiz() {
+    const c = this.offer && this.chars.get(this.offer.id);
+    if (c) c.nextWander = performance.now();
+    this.offer = null;
+    this.quizBubble.hide();
+  }
+
+  /** Top of a character's name label. */
+  private headTop(c: Character): number {
+    return c.y - this.sizeOf(c) - 16;
   }
 
   private deskAreaBottom(): number {

@@ -46,6 +46,7 @@ import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { Office } from './office/office';
 import { connectOfficeFeeds } from './office/feeds';
+import { quizPrompt } from './office/quiz';
 import { guardZoomKeys } from './layout/zoomKeys';
 import { isMac } from './lib/platform';
 import { currentZoom, loadZoom, setZoom, stepZoom } from './layout/zoom';
@@ -102,6 +103,15 @@ function startOffice(
           })
           .catch((err) => toast(`읽을거리를 고르지 못했습니다: ${String(err)}`));
       },
+      (termId, kind) => {
+        // Claude asks the quiz in the session's own terminal and grades it there.
+        if (!panel.submit(termId, quizPrompt(kind))) {
+          toast('세션이 닫혀 퀴즈를 낼 수 없습니다');
+          return;
+        }
+        tabs.activate(termId);
+      },
+      (termId, since) => panel.typedSince(termId, since),
     );
   } catch (err) {
     // The office is decorative; the rest of the dashboard should still load.
