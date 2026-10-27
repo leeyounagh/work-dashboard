@@ -75,6 +75,8 @@ type Deps struct {
 	TodosDir string
 	// OpenPath opens a file with its default app (nil disables it).
 	OpenPath func(path string) error
+	// Tokens keeps daily token totals for the office (nil disables counting).
+	Tokens tokenLedger
 }
 
 // App holds the methods bound to the frontend.
@@ -83,6 +85,7 @@ type App struct {
 	deps   Deps
 	terms  *term.Manager
 	agents *agentRegistry
+	tokens *tokenTracker
 	prs    prCache
 	asks   askCache
 	// shuttingDown keeps sessions killed by app exit marked open, so they
@@ -98,7 +101,7 @@ type App struct {
 
 // NewApp wires the app with its dependencies.
 func NewApp(deps Deps) *App {
-	a := &App{ctx: context.Background(), deps: deps, agents: newAgentRegistry()}
+	a := &App{ctx: context.Background(), deps: deps, agents: newAgentRegistry(), tokens: newTokenTracker()}
 	a.life, a.stopLoads = context.WithCancel(context.Background())
 	a.terms = term.NewManager(deps.Start, a.emitData, a.emitExit)
 	return a

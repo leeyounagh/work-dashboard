@@ -177,6 +177,7 @@ func (a *App) endAgentSession(termID string) {
 	if !ok {
 		return
 	}
+	a.tokens.forget(key)
 	if s, ok := a.agents.remove(key); ok {
 		for _, f := range s.files {
 			_ = os.Remove(f)
@@ -199,6 +200,7 @@ func (a *App) onHook(key string, ev bridge.HookEvent) {
 		out.Progress = todoProgress(ev.ToolInput)
 	}
 	a.deps.Emit(a.ctx, eventAgent, out)
+	a.trackTokens(key, s.termID, ev)
 	if a.deps.Sessions != nil && (ev.Event == "UserPromptSubmit" || ev.Event == "Stop") {
 		_ = a.deps.Sessions.Touch(key, ev.Prompt, a.now())
 	}

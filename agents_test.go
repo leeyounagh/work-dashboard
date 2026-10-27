@@ -4,12 +4,14 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/leeyounagh/work-dashboard/internal/bridge"
 	"github.com/leeyounagh/work-dashboard/internal/term"
+	"github.com/leeyounagh/work-dashboard/internal/tokens"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
@@ -245,5 +247,50 @@ func TestTodoProgressIgnoresJunk(t *testing.T) {
 		if p := todoProgress(input); p != nil {
 			t.Errorf("todoProgress(%v) = %+v, want nil", input, p)
 		}
+	}
+}
+
+func TestHooksCountTranscriptTokens(t *testing.T) {
+	h := newHarness(t)
+	h.app.deps.Tokens = tokens.OpenLedger(filepath.Join(t.TempDir(), "tokens.json"), nil)
+	h.app.tokens.spawn = func(f func()) { f() } // reads in order, no sleeps
+	_, termID := openTestClaude(t, h)
+	transcript := filepath.Join(t.TempDir(), "sid-1.jsonl")
+	line := func(id string, out int) string {
+		return `{"type":"assistant","message":{"id":"` + id + `","usage":{"input_tokens":1,"cache_read_input_tokens":999,"output_tokens":` + strconv.Itoa(out) + "}}}\n"
+	}
+	// A resumed session: history before the dashboard opened it is not counted.
+	if err := os.WriteFile(transcript, []byte(line("old", 500)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hook := func(event, path string) {
+		h.app.onHook("sess-1", bridge.HookEvent{Event: event, SessionID: "sid-1", TranscriptPath: path})
+	}
+	hook("SessionStart", transcript)
+
+	f, err := os.OpenFile(transcript, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(line("new", 9))
+	f.Close()
+	hook("Stop", transcript)
+	ev := waitEvents(t, h, eventTokens, 1)[0].(TokenEvent)
+	if ev.TermID != termID || ev.Tokens != 10 || ev.Today != 10 || ev.Week != 10 {
+		t.Fatalf("token event = %+v", ev)
+	}
+	if got := h.app.OfficeTokens(); got.Today != 10 {
+		t.Fatalf("OfficeTokens = %+v", got)
+	}
+
+	// Only the session's own transcript file (by name) is read, never a network path.
+	other := filepath.Join(filepath.Dir(transcript), "elsewhere.jsonl")
+	if err := os.WriteFile(other, []byte(line("x", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hook("Stop", other)
+	hook("Stop", `\\host\share\sid-1.jsonl`)
+	if n := len(h.eventsNamed(eventTokens)); n != 1 {
+		t.Fatalf("a foreign transcript produced %d token events", n)
 	}
 }

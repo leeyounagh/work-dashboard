@@ -1,5 +1,23 @@
 import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
-import { drawDesk, drawRoom, drawRug } from './background';
+import { drawBookshelf, drawDesk, drawRoom, drawRug } from './background';
+import { FONT, coffeeSpot, drawCelebration, drawCoffeeCounter, drawDeskClutter, drawEarnedFurniture, drawLamp, drawMvpFrame, drawNight, drawSunrise, drawSweat, wallSlots } from './decor';
+import {
+  CELEBRATE_MS,
+  SUNRISE_MS,
+  coffeeEmpty,
+  coffeeLevel,
+  crossedMilestone,
+  cupCount,
+  formatTokens,
+  isReset,
+  lightingFor,
+  mvp,
+  officeLevel,
+  paperCount,
+  plantHealth,
+  sweating,
+  type OfficeUsage,
+} from './vibe';
 import { ACTION_ROW, FRAME, WALK_FRAMES, bobHeight, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect, sheets, type Direction } from './sprites';
 
 /** A terminal as the office sees it. */
@@ -26,7 +44,6 @@ const COLORS = {
   wait: '#e5c07b',
 };
 const FPS = 10; // pixel-art pace
-const FONT = '"Segoe UI", "Malgun Gothic", sans-serif';
 
 interface Character {
   term: OfficeTerminal;
@@ -46,6 +63,9 @@ interface Character {
   pose: number | null;
   poseUntil: number;
   nextPoseAt: number;
+  tokens: number; // this session's tokens since the dashboard opened it
+  celebrate: { at: number; label: string } | null; // a token milestone
+  wantsCoffee: boolean; // queueing at the empty pot
 }
 
 const short = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
@@ -66,6 +86,11 @@ export class Office {
   private readonly cleanups: Array<() => void> = [];
   /** Always in the office; clicking it suggests something to read. */
   private guide: Character = this.newGuide();
+  /** Claude usage limits: light, coffee and plants. */
+  private usage: OfficeUsage = { fiveHour: null, sevenDay: null };
+  private sunriseAt = -Infinity;
+  /** This week's tokens across sessions: earned furniture. */
+  private week = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -120,6 +145,9 @@ export class Office {
       pose: null,
       poseUntil: 0,
       nextPoseAt: performance.now() + 2000,
+      tokens: 0,
+      celebrate: null,
+      wantsCoffee: false,
     };
   }
 
@@ -178,6 +206,9 @@ export class Office {
         pose: null,
         poseUntil: 0,
         nextPoseAt: performance.now() + 3000 + Math.random() * 8000,
+        tokens: 0,
+        celebrate: null,
+        wantsCoffee: false,
       });
     }
   }
@@ -190,6 +221,25 @@ export class Office {
   event(termId: string, ev: HookInput): void {
     const c = this.chars.get(termId);
     if (c) c.state = nextState(c.state, ev, performance.now());
+  }
+
+  /** New usage limits; a reset of the 5-hour window brings the morning. */
+  setUsage(next: OfficeUsage): void {
+    if (isReset(this.usage.fiveHour, next.fiveHour)) this.sunriseAt = performance.now();
+    this.usage = next;
+  }
+
+  /** A session's token count; crossing a milestone sets off confetti. */
+  setTokens(termId: string, tokens: number): void {
+    const c = this.chars.get(termId);
+    if (!c) return;
+    const milestone = crossedMilestone(c.tokens, tokens);
+    if (milestone !== null) c.celebrate = { at: performance.now(), label: formatTokens(milestone) };
+    c.tokens = tokens;
+  }
+
+  setWeekTokens(week: number): void {
+    this.week = week;
   }
 
   destroy(): void {
@@ -272,16 +322,26 @@ export class Office {
   /** Busy characters go to their desk; idle ones float around the open floor. */
   private update(now: number) {
     const openTop = this.deskAreaBottom() + 30;
+    const noCoffee = coffeeEmpty(this.usage.fiveHour);
+    const pot = coffeeSpot(this.width, WALL_H);
     this.updatePose(this.guide, true, now);
     for (const c of this.visible()) {
       const spot = deskSpot(c.desk, this.width);
       const busy = c.state.mood !== 'idle' && c.term.alive;
       this.updatePose(c, !busy, now);
+      if (busy || !noCoffee) c.wantsCoffee = false;
       if (busy) {
         // On the stool in front of the desk.
         c.tx = spot.x;
         c.ty = spot.y + SEAT_Y;
+      } else if (now > c.nextWander && noCoffee && pot && Math.random() < 0.5) {
+        // The pot is empty: wait by the counter for a refill (the reset).
+        c.wantsCoffee = true;
+        c.tx = pot.x + (Math.random() - 0.5) * 50;
+        c.ty = pot.y + Math.random() * 4;
+        c.nextWander = now + 5000 + Math.random() * 5000;
       } else if (now > c.nextWander) {
+        c.wantsCoffee = false;
         c.tx = 30 + Math.random() * Math.max(1, this.width - 60);
         c.ty = Math.min(this.height - 22, openTop + SIZE + Math.random() * Math.max(1, this.height - openTop - SIZE - 22));
         c.nextWander = now + 3000 + Math.random() * 5000;
@@ -311,15 +371,39 @@ export class Office {
 
   private draw(now: number) {
     const { ctx, width: w, height: h } = this;
-    drawRoom(ctx, w, h, WALL_H);
+    drawRoom(ctx, w, h, WALL_H, plantHealth(this.usage.sevenDay));
     const shown = this.visible();
+    this.drawWallDecor(shown);
     if (shown.length) drawRug(ctx, w, this.deskAreaBottom(), h);
+    // Earned furniture, only where the floor below the desks has room (clear of the guide).
+    if (h - this.deskAreaBottom() >= 80 && w >= 360) drawEarnedFurniture(ctx, officeLevel(this.week), h - 6, (x, bottom) => drawBookshelf(ctx, x, bottom), this.tick);
 
     this.placeGuide();
 
     for (const c of shown) this.drawDesk(c);
+    // Night falls on the room; desk lamps and the characters stay lit.
+    const light = lightingFor(this.usage.fiveHour);
+    drawNight(ctx, w, h, light.dark);
+    if (light.lamps) for (const c of shown) this.drawDeskLamp(c);
     // Back to front so lower characters overlap higher ones.
     for (const c of [...shown, this.guide].sort((a, b) => a.y - b.y)) this.drawCharacter(c, now);
+    drawSunrise(ctx, w, h, (now - this.sunriseAt) / SUNRISE_MS);
+  }
+
+  /** The MVP frame and the coffee counter in the wall's slots. */
+  private drawWallDecor(shown: Character[]) {
+    const slots = wallSlots(this.width);
+    if (slots.frameX !== null) {
+      // The full tab title: several default terminals are all just "Claude" by name.
+      const best = mvp(shown.map((c) => ({ title: c.term.title, tokens: c.tokens })));
+      drawMvpFrame(this.ctx, slots.frameX, 8, best?.title ?? null, best ? formatTokens(best.tokens) : '');
+    }
+    if (slots.counterX !== null) drawCoffeeCounter(this.ctx, slots.counterX, WALL_H - 2, coffeeLevel(this.usage.fiveHour), this.tick);
+  }
+
+  private drawDeskLamp(c: Character) {
+    const s = deskSpot(c.desk, this.width);
+    drawLamp(this.ctx, s.x, s.y);
   }
 
   private drawDesk(c: Character) {
@@ -335,6 +419,8 @@ export class Office {
     const blink = this.tick % 8 < 4;
     ctx.fillStyle = mood === 'working' ? COLORS.screenWork : mood === 'waiting' && blink ? COLORS.screenWait : COLORS.screenIdle;
     ctx.fillRect(x, y + 2, 24, 12);
+    // The session's tokens pile up as paper and coffee cups.
+    drawDeskClutter(ctx, s.x, s.y, paperCount(c.tokens), cupCount(c.tokens));
   }
 
   private drawSprite(c: Character, moving: boolean, atDesk: boolean, x: number, y: number, size: number) {
@@ -396,8 +482,16 @@ export class Office {
     const progress = c.term.alive ? progressOf(c.state, now) : null;
     if (progress) this.drawProgress(progress, c.x, y - 18);
     const bubbleBottom = progress ? y - 40 : y - 18;
-    const text = c === this.guide ? GUIDE_BUBBLE : c.term.alive ? bubbleFor(c.state) : 'zZ';
+    const coffee = c.wantsCoffee && !moving ? '커피…' : '';
+    const text = c === this.guide ? GUIDE_BUBBLE : c.term.alive ? bubbleFor(c.state) || coffee : 'zZ';
     if (text && !(c.state.mood === 'waiting' && this.tick % 8 >= 6)) this.drawBubble(text, c.x, bubbleBottom, c.state.mood === 'waiting');
+
+    if (atDesk && sweating(c.tokens)) drawSweat(ctx, x + size - 4, y + 4, this.tick);
+    if (c.celebrate) {
+      const elapsed = now - c.celebrate.at;
+      if (elapsed > CELEBRATE_MS) c.celebrate = null;
+      else drawCelebration(ctx, c.x, y + size / 3, c.y, elapsed, c.celebrate.label);
+    }
   }
 
   /** A small bar (to-do fraction) and a label (2/5 step, or tools · time) above the name. */

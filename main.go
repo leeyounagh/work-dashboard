@@ -24,6 +24,7 @@ import (
 	"github.com/leeyounagh/work-dashboard/internal/launch"
 	"github.com/leeyounagh/work-dashboard/internal/sessions"
 	"github.com/leeyounagh/work-dashboard/internal/term"
+	"github.com/leeyounagh/work-dashboard/internal/tokens"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
@@ -107,6 +108,7 @@ func main() {
 		Claude:        claudeacct.New(claudeacct.Options{}),
 		RunDir:        runDir,
 		OpenPath:      openWithDefaultApp,
+		Tokens:        tokens.OpenLedger(filepath.Join(filepath.Dir(dir), "tokens.json"), nil),
 	})
 
 	err = wails.Run(&options.App{

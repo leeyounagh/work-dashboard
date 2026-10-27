@@ -38,6 +38,10 @@ export function ListDir(arg1) {
   return window['go']['main']['App']['ListDir'](arg1);
 }
 
+export function OfficeTokens() {
+  return window['go']['main']['App']['OfficeTokens']();
+}
+
 export function OpenClaude(arg1, arg2, arg3) {
   return window['go']['main']['App']['OpenClaude'](arg1, arg2, arg3);
 }
