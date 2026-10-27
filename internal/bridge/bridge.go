@@ -38,6 +38,8 @@ type HookEvent struct {
 	ToolInput map[string]any `json:"tool_input"`
 	Message   string         `json:"message"` // Notification
 	Prompt    string         `json:"prompt"`  // UserPromptSubmit
+	// TranscriptPath is the session's JSONL transcript (token counts).
+	TranscriptPath string `json:"transcript_path"`
 }
 
 // FilePath returns the file a tool call touched, if any.

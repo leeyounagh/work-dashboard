@@ -3,6 +3,8 @@
  * floor, a bookshelf wall, plants, a rug, and one desk per terminal.
  */
 import tilesetUrl from '../assets/tileset.png';
+import { FRAME_W, wallSlots } from './decor';
+import type { PlantHealth } from './vibe';
 
 const T = 16; // tileset tile size
 const S = 2; // decor scale (32px per tile)
@@ -37,11 +39,53 @@ export function tileSize(name: Tile): { w: number; h: number } {
   return { w: w * T * S, h: h * T * S };
 }
 
+/** Plant tinted brown as it wilts, cached per health. */
+const plantCache = new Map<PlantHealth, HTMLCanvasElement>();
+
+function plantFor(health: PlantHealth): CanvasImageSource {
+  if (health === 'fresh') return img;
+  const hit = plantCache.get(health);
+  if (hit) return hit;
+  const [c, r, w, h] = TILES.plant;
+  const off = document.createElement('canvas');
+  off.width = w * T;
+  off.height = h * T;
+  const o = off.getContext('2d');
+  if (!o) return img;
+  o.drawImage(img, c * T, r * T, w * T, h * T, 0, 0, w * T, h * T);
+  // Brown only the plant's own pixels.
+  o.globalCompositeOperation = 'source-atop';
+  o.fillStyle = health === 'droopy' ? 'rgba(150, 120, 50, 0.4)' : 'rgba(110, 70, 30, 0.75)';
+  o.fillRect(0, 0, off.width, off.height);
+  plantCache.set(health, off);
+  return off;
+}
+
+function drawPlant(ctx: CanvasRenderingContext2D, x: number, y: number, health: PlantHealth) {
+  const size = tileSize('plant');
+  const src = plantFor(health);
+  if (src === img) tile(ctx, 'plant', x, y);
+  else ctx.drawImage(src, Math.round(x), Math.round(y), size.w, size.h);
+  if (health === 'wilted') {
+    // Fallen leaves at the pot.
+    ctx.fillStyle = '#8a6a32';
+    ctx.fillRect(Math.round(x) - 4, Math.round(y + size.h - 4), 4, 2);
+    ctx.fillRect(Math.round(x + size.w) + 1, Math.round(y + size.h - 2), 4, 2);
+  }
+}
+
+/** A floor-standing bookshelf (earned furniture) standing on bottom. */
+export function drawBookshelf(ctx: CanvasRenderingContext2D, x: number, bottom: number): { w: number; h: number } {
+  const size = tileSize('bookshelf');
+  if (ready()) tile(ctx, 'bookshelf', x, bottom - size.h);
+  return size;
+}
+
 /**
  * Floor, wall and decor. Falls back to a plain dark floor until the tileset
  * has loaded.
  */
-export function drawRoom(ctx: CanvasRenderingContext2D, w: number, h: number, wallH: number): void {
+export function drawRoom(ctx: CanvasRenderingContext2D, w: number, h: number, wallH: number, plants: PlantHealth = 'fresh'): void {
   if (!ready()) {
     ctx.fillStyle = '#25262a';
     ctx.fillRect(0, 0, w, h);
@@ -60,8 +104,10 @@ export function drawRoom(ctx: CanvasRenderingContext2D, w: number, h: number, wa
   ctx.fillRect(0, wallH - 4, w, 4);
   const shelf = tileSize('bookshelf');
   const pattern: Tile[] = ['bookshelf', 'drawers', 'bookshelf', 'bookshelfSmall'];
-  let x = 56;
-  for (let i = 0; x + shelf.w < w - 48; i++) {
+  const slots = wallSlots(w);
+  let x = slots.frameX === null ? 56 : slots.frameX + FRAME_W + 12;
+  const end = slots.counterX === null ? w - 48 : slots.counterX - 12;
+  for (let i = 0; x + shelf.w < end; i++) {
     const name = pattern[i % pattern.length];
     const size = tileSize(name);
     tile(ctx, name, x, wallH - 4 - size.h);
@@ -69,8 +115,8 @@ export function drawRoom(ctx: CanvasRenderingContext2D, w: number, h: number, wa
   }
   // Plants in the corners by the wall.
   const plant = tileSize('plant');
-  tile(ctx, 'plant', 12, wallH - plant.h + 6);
-  tile(ctx, 'plant', w - plant.w - 12, wallH - plant.h + 6);
+  drawPlant(ctx, 12, wallH - plant.h + 6, plants);
+  drawPlant(ctx, w - plant.w - 12, wallH - plant.h + 6, plants);
 }
 
 /** The rug in the open area where idle characters float around. */

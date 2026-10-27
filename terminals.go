@@ -177,6 +177,7 @@ func (a *App) openClaude(workspaceID string, opts launch.ClaudeOptions, folders 
 		_ = os.Remove(settingsFile)
 		return term.Info{}, err
 	}
+	a.tokens.open(key)
 
 	ws := workspace.Workspace{ID: workspaceID, Name: name, Folders: folders}
 	spec, err := launch.ClaudeSpec(ws, opts)

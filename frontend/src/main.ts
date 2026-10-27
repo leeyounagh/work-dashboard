@@ -45,6 +45,7 @@ import { BrowserOpenURL, EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { Office } from './office/office';
+import { connectOfficeFeeds } from './office/feeds';
 import { guardZoomKeys } from './layout/zoomKeys';
 import { isMac } from './lib/platform';
 import { currentZoom, loadZoom, setZoom, stepZoom } from './layout/zoom';
@@ -135,10 +136,13 @@ function startOffice(
     })
     .catch(() => {});
   const off = EventsOn('agent:event', (ev: AgentEvent) => office.event(ev.termId, ev));
+  // Claude usage and token counts change the light, coffee, plants and desks.
+  const offFeeds = connectOfficeFeeds(office);
   return {
     refresh,
     stop: () => {
       off();
+      offFeeds();
       office.destroy();
     },
   };

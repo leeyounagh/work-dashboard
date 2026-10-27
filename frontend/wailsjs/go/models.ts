@@ -465,6 +465,25 @@ export namespace term {
 
 }
 
+export namespace tokens {
+	
+	export class Totals {
+	    today: number;
+	    week: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Totals(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.today = source["today"];
+	        this.week = source["week"];
+	    }
+	}
+
+}
+
 export namespace widget {
 	
 	export class SettingSpec {
