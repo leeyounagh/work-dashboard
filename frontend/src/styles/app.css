@@ -331,3 +331,32 @@ body.resizing-col .tab-pane, body.resizing-row .tab-pane, body.resizing-col canv
 .w-add-row { flex-direction: column; align-items: stretch; gap: 4px; cursor: default; }
 .w-add-row > button { align-self: flex-start; }
 .w-add-row .w-inline-add { min-width: 0; }
+
+/* Quiz offer over a character in the office */
+.quiz-bubble {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -100%);
+  width: max-content;
+  max-width: 220px;
+  padding: 6px 8px;
+  background: var(--text);
+  color: var(--bg);
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.quiz-bubble[hidden] { display: none; }
+.quiz-bubble::after {
+  content: '';
+  position: absolute;
+  left: calc(50% + var(--tail, 0px));
+  bottom: -5px;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--text);
+}
+.quiz-buttons { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
+.quiz-buttons button { padding: 2px 10px; font-size: 12px; }

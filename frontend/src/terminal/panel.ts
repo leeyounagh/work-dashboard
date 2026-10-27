@@ -27,6 +27,7 @@ interface Session extends TerminalInfo {
   term: Terminal;
   fit: FitAddon;
   pane: HTMLElement;
+  typedAt: number; // performance.now() of the last keystroke, 0 if none
 }
 
 interface WailsRuntime {
@@ -47,6 +48,10 @@ const THEME = {
 };
 
 const BASE_FONT = 13;
+/** Focus in/out reports the terminal sends on its own; not typing. */
+const FOCUS_REPORT = /^\x1b\[[IO]$/;
+/** Pause between a typed prompt and its Enter, so Claude sees two inputs. */
+const SUBMIT_DELAY_MS = 150;
 
 // Strip C0 control characters so an error string cannot inject escape sequences.
 // eslint-disable-next-line no-control-regex
@@ -128,6 +133,25 @@ export class TerminalPanel {
     if (!s?.alive || !text) return;
     s.term.paste(text);
     s.term.focus();
+  }
+
+  /**
+   * Types a one-line prompt into a live terminal and submits it. Enter goes
+   * separately: inside a (bracketed) paste it would be a newline, not submit.
+   */
+  /** Whether the user typed into the terminal after the given time (performance.now()). */
+  typedSince(id: string, since: number): boolean {
+    return (this.sessions.get(id)?.typedAt ?? 0) >= since;
+  }
+
+  submit(id: string, text: string): boolean {
+    const s = this.sessions.get(id);
+    if (!s?.alive) return false;
+    s.term.paste(text);
+    window.setTimeout(() => {
+      if (s.alive) TermWrite(s.id, '\r').catch((err) => this.onError(String(err)));
+    }, SUBMIT_DELAY_MS);
+    return true;
   }
 
   private inBody(x: number, y: number): boolean {
@@ -241,7 +265,7 @@ export class TerminalPanel {
       fit.fit();
 
       const info = await launch(term.cols, term.rows);
-      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane };
+      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane, typedAt: 0 };
       dir = info.dir;
     } catch (err) {
       term?.dispose();
@@ -258,6 +282,7 @@ export class TerminalPanel {
   private register(session: Session, dir: string) {
     this.sessions.set(session.id, session);
     session.term.onData((data) => {
+      if (!FOCUS_REPORT.test(data)) session.typedAt = performance.now();
       if (session.alive) TermWrite(session.id, data).catch((err) => this.onError(String(err)));
     });
     this.wireClipboard(session);
