@@ -5,7 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
 import { CanResolveFilePaths, ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
 import { carriesFiles, droppedPathsText } from './fileDrop';
-import { clipboardAction } from './clipboard';
+import { clipboardAction, osc52Text } from './clipboard';
 import { bridgeHangulInput } from './hangulInput';
 import { isMac } from '../lib/platform';
 import { base64ToBytes } from '../lib/workspaceDraft';
@@ -253,6 +253,8 @@ export class TerminalPanel {
         fontSize: BASE_FONT * this.fontScale,
         cursorBlink: true,
         scrollback: 5000,
+        // Claude Code takes the mouse; Option+drag still selects text here (Shift+drag elsewhere).
+        macOptionClickForcesSelection: isMac(),
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
@@ -343,8 +345,15 @@ export class TerminalPanel {
       // Stop the browser's own paste event too, or the text would arrive twice.
       e.preventDefault();
       if (action === 'copy') copy();
-      else paste();
+      else if (action === 'paste') paste();
       return false;
+    });
+    // Programs copy with OSC 52 (Claude Code does for its own mouse selection);
+    // xterm.js ignores it unless handled, so the clipboard stayed unchanged.
+    term.parser.registerOscHandler(52, (data) => {
+      const text = osc52Text(data);
+      if (text) ClipboardSetText(text).catch((err) => this.onError(`복사하지 못했습니다: ${String(err)}`));
+      return true;
     });
     session.pane.addEventListener('contextmenu', (e) => {
       e.preventDefault();
