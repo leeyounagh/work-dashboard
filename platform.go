@@ -77,6 +77,19 @@ func mergePath(login, current string, extras []string, sep string, exists func(s
 	return strings.Join(out, sep)
 }
 
+// utf8Locale returns the LANG to set for an app started from the Dock or a
+// launcher, which gets no locale: then pbcopy/pbpaste (the clipboard) and the
+// terminals' programs fall back to a legacy encoding and garble Korean.
+// "" means the environment already names a locale.
+func utf8Locale(getenv func(string) string) string {
+	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if getenv(k) != "" {
+			return ""
+		}
+	}
+	return "en_US.UTF-8"
+}
+
 // fixPath gives a macOS / Linux app started from the Dock or a launcher the
 // PATH of the user's terminal, so claude, gh and git installed with
 // Homebrew, npm or the Claude installer are found. Windows apps already get
@@ -100,6 +113,9 @@ func fixPath() {
 	exists := func(dir string) bool {
 		info, err := os.Stat(dir)
 		return err == nil && info.IsDir()
+	}
+	if lang := utf8Locale(os.Getenv); lang != "" {
+		_ = os.Setenv("LANG", lang)
 	}
 	_ = os.Setenv("PATH", mergePath(pathFromShellOutput(string(out)), os.Getenv("PATH"), extras, string(os.PathListSeparator), exists))
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clipboardAction } from './clipboard';
+import { clipboardAction, osc52Text } from './clipboard';
 
 const key = (k: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean } = {}) => ({
   type: 'keydown',
@@ -32,7 +32,8 @@ describe('clipboardAction', () => {
     expect(clipboardAction(key('v', { meta: true }), false, true)).toBe('paste');
     expect(clipboardAction(key('c', { ctrl: true }), true, true)).toBeNull(); // ^C interrupts
     expect(clipboardAction(key('v', { ctrl: true }), false, true)).toBeNull();
-    expect(clipboardAction(key('c', { meta: true }), false, true)).toBeNull();
+    // Without a selection Cmd+C is swallowed, so the Edit menu cannot wipe the clipboard.
+    expect(clipboardAction(key('c', { meta: true }), false, true)).toBe('block');
   });
 
   it('ignores other keys and key-ups', () => {
@@ -40,5 +41,21 @@ describe('clipboardAction', () => {
     expect(clipboardAction(key('v', { ctrl: true, alt: true }), false)).toBeNull();
     expect(clipboardAction({ ...key('v', { ctrl: true }), type: 'keyup' }, false)).toBeNull();
     expect(clipboardAction(key('x', { ctrl: true }), true)).toBeNull();
+  });
+});
+
+describe('osc52Text', () => {
+  const b64 = (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+
+  it('decodes the copied text, Korean included', () => {
+    expect(osc52Text(`c;${b64('hello')}`)).toBe('hello');
+    expect(osc52Text(`c;${b64('한글 복사')}`)).toBe('한글 복사');
+    expect(osc52Text(`;${b64('no target')}`)).toBe('no target');
+  });
+
+  it('ignores clipboard queries and malformed sequences', () => {
+    expect(osc52Text('c;?')).toBeNull();
+    expect(osc52Text('nosemicolon')).toBeNull();
+    expect(osc52Text('c;%%%')).toBeNull();
   });
 });

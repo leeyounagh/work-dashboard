@@ -23,6 +23,7 @@ Electron 앱 대신 OS 의 웹 엔진을 쓰는 작은 앱 하나(Windows 약 13
 | Linux (x86-64) | `work-dashboard-linux-amd64.tar.gz` | WebKitGTK 가 필요합니다: Ubuntu/Debian `sudo apt install libwebkit2gtk-4.1-0`, Fedora `sudo dnf install webkit2gtk4.1` |
 
 macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 터미널 복사·붙여넣기 Cmd+C/V).
+Claude 화면에서 마우스로 드래그해 선택하면 바로 클립보드로 복사되고, 터미널 글자를 직접 고르려면 **Option** 을 누른 채 드래그합니다.
 
 ### 무엇을 하나요
 
@@ -142,6 +143,7 @@ Get the file for your OS from [Releases](https://github.com/leeyounagh/work-dash
 | Linux (x86-64) | `work-dashboard-linux-amd64.tar.gz` | needs WebKitGTK: Ubuntu/Debian `sudo apt install libwebkit2gtk-4.1-0`, Fedora `sudo dnf install webkit2gtk4.1` |
 
 On macOS the shortcuts use **Cmd** instead of Ctrl (zoom Cmd +/−/0, terminal copy/paste Cmd+C/V).
+A mouse selection in Claude is copied straight to the clipboard; hold **Option** while dragging to select terminal text yourself.
 
 ### What it does
 

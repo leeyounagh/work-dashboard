@@ -63,3 +63,15 @@ func TestLoginPathParsing(t *testing.T) {
 		t.Fatalf("no marker: %q", got)
 	}
 }
+
+func TestUTF8Locale(t *testing.T) {
+	env := func(vars map[string]string) func(string) string { return func(k string) string { return vars[k] } }
+	if got := utf8Locale(env(nil)); got != "en_US.UTF-8" {
+		t.Fatalf("no locale: got %q, want en_US.UTF-8", got)
+	}
+	for _, k := range []string{"LANG", "LC_ALL", "LC_CTYPE"} {
+		if got := utf8Locale(env(map[string]string{k: "ko_KR.UTF-8"})); got != "" {
+			t.Fatalf("%s set: got %q, want it left alone", k, got)
+		}
+	}
+}
