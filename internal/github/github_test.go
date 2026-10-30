@@ -28,7 +28,9 @@ const fixture = `{"data":{"search":{"nodes":[
   "reviewRequests":{"nodes":[]},"reviews":{"nodes":[]},
   "comments":{"nodes":[
     {"author":{"login":"rev"},"createdAt":"2026-10-22T02:00:00Z","body":"리뷰 회차: 1\n\n<!-- review-gate verdict=Block -->\n**결과:** Block"},
-    {"author":{"login":"pm"},"createdAt":"2026-10-22T03:00:00Z","body":"PM 결정: B 로 갑니다"},
+    {"author":{"__typename":"User","login":"pm"},"createdAt":"2026-10-22T03:00:00Z","body":"PM 결정: B 로 갑니다"},
+    {"author":{"__typename":"Bot","login":"linear-code"},"createdAt":"2026-10-22T03:10:00Z","body":"<!-- linear-linkback -->"},
+    {"author":null,"createdAt":"2026-10-22T03:20:00Z","body":"deleted account"},
     {"author":{"login":"rev"},"createdAt":"2026-10-22T04:00:00Z","body":"<!--review-gate verdict=Warning-->"},
     {"author":{"login":"rev"},"createdAt":"2026-10-22T05:00:00Z","body":"<!-- review-gate verdict=Approve -->"},
     {"author":{"login":"rev"},"createdAt":"2026-10-22T06:00:00Z","body":"<!-- review-gate verdict=Maybe -->"}]},
@@ -85,8 +87,8 @@ func TestSearch(t *testing.T) {
 	}
 }
 
-// Reviews posted as PR comments by the review-gate tool count as reviews;
-// other comments do not.
+// Reviews posted as PR comments by the review-gate tool count as reviews,
+// people's plain comments as COMMENTED reviews; bot comments do not count.
 func TestSearchReviewGateComments(t *testing.T) {
 	var args []string
 	prs, err := Search(context.Background(), fakeRunner(fixture, nil, &args), "q")
@@ -94,13 +96,19 @@ func TestSearchReviewGateComments(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := prs[1].Reviews
-	want := []string{"CHANGES_REQUESTED", "COMMENTED", "APPROVED"}
+	want := []Review{
+		{Author: "rev", State: "CHANGES_REQUESTED", Gate: true},
+		{Author: "pm", State: "COMMENTED", Comment: true},
+		{Author: "rev", State: "COMMENTED", Gate: true},
+		{Author: "rev", State: "APPROVED", Gate: true},
+	}
 	if len(got) != len(want) {
 		t.Fatalf("reviews = %+v", got)
 	}
 	for i, r := range got {
-		if r.State != want[i] || r.Author != "rev" || !r.Gate {
-			t.Fatalf("review %d = %+v, want %s from rev", i, r, want[i])
+		r.SubmittedAt = want[i].SubmittedAt
+		if r != want[i] {
+			t.Fatalf("review %d = %+v, want %+v", i, r, want[i])
 		}
 	}
 	if got[0].SubmittedAt.Hour() != 2 {

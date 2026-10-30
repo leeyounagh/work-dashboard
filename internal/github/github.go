@@ -39,6 +39,8 @@ type Review struct {
 	SubmittedAt time.Time `json:"submittedAt"`
 	// Gate marks a review posted as a PR comment by the review-gate tool.
 	Gate bool `json:"gate,omitempty"`
+	// Comment marks a plain PR comment, counted as a COMMENTED review.
+	Comment bool `json:"comment,omitempty"`
 }
 
 // Check is one CI check or commit status.
@@ -78,7 +80,7 @@ const searchQuery = `query($q: String!) {
         baseRefName headRefName
         reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Bot { login } ... on Team { name } } } }
         reviews(last: 100) { nodes { author { login } state submittedAt } }
-        comments(last: 100) { nodes { author { login } createdAt body } }
+        comments(last: 100) { nodes { author { __typename login } createdAt body } }
         commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 100) { nodes {
           ... on CheckRun { name conclusion status detailsUrl }
           ... on StatusContext { context state targetUrl }
@@ -100,8 +102,9 @@ type gqlResponse struct {
 }
 
 type login struct {
-	Login string `json:"login"`
-	Name  string `json:"name"`
+	Login    string `json:"login"`
+	Name     string `json:"name"`
+	Typename string `json:"__typename"` // asked for on comments only
 }
 
 type gqlPR struct {
@@ -203,11 +206,17 @@ func convert(n gqlPR) PR {
 		pr.Reviews = append(pr.Reviews, Review{Author: r.Author.name(), State: r.State, SubmittedAt: r.SubmittedAt})
 	}
 	for _, c := range n.Comments.Nodes {
-		m := gateMark.FindStringSubmatch(c.Body)
-		if m == nil || gateStates[m[1]] == "" {
+		if m := gateMark.FindStringSubmatch(c.Body); m != nil {
+			if gateStates[m[1]] != "" {
+				pr.Reviews = append(pr.Reviews, Review{Author: c.Author.name(), State: gateStates[m[1]], SubmittedAt: c.CreatedAt, Gate: true})
+			}
 			continue
 		}
-		pr.Reviews = append(pr.Reviews, Review{Author: c.Author.name(), State: gateStates[m[1]], SubmittedAt: c.CreatedAt, Gate: true})
+		// Reviewers often answer in the conversation instead of a review.
+		// Bot comments (issue links, deploy previews) are not reviews.
+		if c.Author != nil && c.Author.Typename != "Bot" {
+			pr.Reviews = append(pr.Reviews, Review{Author: c.Author.name(), State: "COMMENTED", SubmittedAt: c.CreatedAt, Comment: true})
+		}
 	}
 	if len(n.Commits.Nodes) > 0 && n.Commits.Nodes[0].Commit.StatusCheckRollup != nil {
 		roll := n.Commits.Nodes[0].Commit.StatusCheckRollup

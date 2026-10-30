@@ -16,6 +16,9 @@ type ReviewerStatus struct {
 	At    time.Time `json:"at"`
 	// Rerequested: review was requested again after this reviewer's last review.
 	Rerequested bool `json:"rerequested,omitempty"`
+	// commentOnly: the position comes from plain PR comments, which leave a
+	// review request in place, so a pending request is not a re-request.
+	commentOnly bool
 }
 
 // PRRef is the part of a PR every list shows.
@@ -61,7 +64,7 @@ func Reviewers(pr github.PR) []ReviewerStatus {
 		if r.State == "COMMENTED" && !r.Gate && seen && decisive(cur.State) {
 			continue
 		}
-		latest[key] = ReviewerStatus{Login: r.Author, State: r.State, At: r.SubmittedAt}
+		latest[key] = ReviewerStatus{Login: r.Author, State: r.State, At: r.SubmittedAt, commentOnly: r.Comment && (!seen || cur.commentOnly)}
 	}
 	requested := map[string]bool{}
 	for _, req := range pr.Requested {
@@ -70,7 +73,7 @@ func Reviewers(pr github.PR) []ReviewerStatus {
 	out := make([]ReviewerStatus, 0, len(order)+len(pr.Requested))
 	for _, key := range order {
 		st := latest[key]
-		st.Rerequested = requested[key]
+		st.Rerequested = requested[key] && !st.commentOnly
 		out = append(out, st)
 	}
 	for _, req := range pr.Requested {
