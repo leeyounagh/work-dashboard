@@ -187,6 +187,7 @@ func (a *App) openClaude(workspaceID string, opts launch.ClaudeOptions, folders 
 		info, err = a.terms.Open(spec, cols, rows)
 		if err == nil {
 			a.agents.bindTerm(key, info.ID)
+			info.Session = key
 			if a.deps.Sessions != nil {
 				now := a.now()
 				_ = a.deps.Sessions.Started(sessions.Record{SessionID: key, WorkspaceID: workspaceID, StartedAt: now, LastActive: now})

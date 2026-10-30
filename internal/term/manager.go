@@ -36,6 +36,8 @@ type Info struct {
 	Title string `json:"title"`
 	Dir   string `json:"dir"`
 	Kind  string `json:"kind"`
+	// Session is the Claude session ID, which outlives the terminal (tab order is kept by it).
+	Session string `json:"session,omitempty"`
 }
 
 // Process is a started command attached to a pseudo-terminal.
