@@ -92,6 +92,7 @@ func (s *Store) load(name string) (Workspace, error) {
 	if want := strings.TrimSuffix(name, ".json"); ws.ID != want {
 		return Workspace{}, fmt.Errorf("%s: id %q does not match the file name", name, ws.ID)
 	}
+	ws.Widgets = withoutRetired(ws.Widgets)
 	if err := ws.Validate(); err != nil {
 		return Workspace{}, fmt.Errorf("%s: %w", name, err)
 	}

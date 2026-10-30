@@ -47,6 +47,10 @@ func TestArgs(t *testing.T) {
 	if got := Args(Request{Prompt: "p", Schema: schema, NoMCP: true}); !slices.Contains(got, "--strict-mcp-config") || !slices.Contains(got, "--setting-sources") {
 		t.Fatalf("NoMCP: Args = %q", got)
 	}
+	got := Args(Request{Prompt: "p", Schema: schema, MaxBudgetUSD: 0.6})
+	if i := slices.Index(got, "--max-budget-usd"); got[i+1] != "0.6" {
+		t.Fatalf("budget: Args = %q", got)
+	}
 }
 
 func TestAsk(t *testing.T) {
@@ -122,5 +126,26 @@ func TestClaudeRunner(t *testing.T) {
 	}
 	if _, err := Claude("definitely-missing-claude-xyz")(context.Background(), t.TempDir()); err == nil {
 		t.Fatal("missing executable must fail")
+	}
+}
+
+func TestParseServersAndHideOthers(t *testing.T) {
+	out := "Checking MCP server health…\n\n" +
+		"claude.ai Notion: https://mcp.notion.com/mcp - ✔ Connected\r\n" +
+		"claude.ai Microsoft 365: https://microsoft365.mcp.claude.com/mcp - ✔ Connected\n" +
+		"plugin:figma:figma: https://mcp.figma.com/mcp (HTTP) - ✔ Connected\n" +
+		"linear: https://mcp.linear.app/mcp (HTTP) - ✔ Connected\n" +
+		"work-dashboard: node bridge.js - ✔ Connected\n"
+	servers := ParseServers(out)
+	want := []string{"mcp__claude_ai_Notion", "mcp__claude_ai_Microsoft_365", "mcp__plugin_figma_figma", "mcp__linear", "mcp__work-dashboard"}
+	if !slices.Equal(servers, want) {
+		t.Fatalf("ParseServers = %q", servers)
+	}
+	got := HideOthers(servers, []string{"mcp__linear__list_issues", "mcp__claude_ai_Microsoft_365__read_resource"})
+	if !slices.Equal(got, []string{"mcp__claude_ai_Notion", "mcp__plugin_figma_figma", "mcp__work-dashboard"}) {
+		t.Fatalf("HideOthers = %q", got)
+	}
+	if ParseServers("") != nil || HideOthers(nil, []string{"x"}) != nil {
+		t.Fatal("empty input")
 	}
 }

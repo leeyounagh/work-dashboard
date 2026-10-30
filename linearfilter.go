@@ -82,3 +82,53 @@ func filterMyNotifications(in []LinearNotification, mine []string) []LinearNotif
 	}
 	return out
 }
+
+// issueTeam is the team key of an identifier like GRO-123.
+func issueTeam(id string) string {
+	key, _, ok := strings.Cut(id, "-")
+	if !ok {
+		return ""
+	}
+	return strings.ToUpper(key)
+}
+
+// matchesAny reports whether one of the values names the wanted ones
+// (ignoring case); no wanted values matches everything.
+func matchesAny(wanted []string, values ...string) bool {
+	if len(wanted) == 0 {
+		return true
+	}
+	for _, w := range wanted {
+		for _, v := range values {
+			if v != "" && strings.EqualFold(w, v) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// filterLinearIssues keeps the issues of the given teams (key or name) and
+// states. Filtering here, not in the prompt, lets every workspace share one lookup.
+func filterLinearIssues(in []LinearIssue, teams, states []string) []LinearIssue {
+	out := []LinearIssue{}
+	for _, is := range in {
+		if matchesAny(teams, issueTeam(is.ID), is.Team) && matchesAny(states, is.State) {
+			out = append(out, is)
+		}
+	}
+	return out
+}
+
+// filterNotificationsByTeam keeps notifications about the teams' issues.
+// Ones not about an issue (a project or document mention) stay everywhere.
+func filterNotificationsByTeam(in []LinearNotification, teams []string) []LinearNotification {
+	out := []LinearNotification{}
+	for _, n := range in {
+		m := issueInURL.FindStringSubmatch(n.URL)
+		if m == nil || matchesAny(teams, issueTeam(m[1])) {
+			out = append(out, n)
+		}
+	}
+	return out
+}

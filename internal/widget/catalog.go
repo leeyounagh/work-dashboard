@@ -21,7 +21,7 @@ const (
 	LinearIssues   = "linear-issues"
 	LinearInbox    = "linear-inbox"
 	NotionSpecs    = "notion-specs"
-	DeploySwap     = "deploy-swap"
+	TeamsDeploy    = "teams-deploy"
 	Worktrees      = "worktrees"
 	QA2Pass        = "qa-2pass"
 	ClaudeUsage    = "claude-usage"
@@ -31,6 +31,15 @@ const (
 	FolderFiles    = "folder-files"
 	Todo           = "todo"
 )
+
+// retired widget types were removed from the dashboard; saved workspaces
+// drop them when loaded instead of failing to load.
+var retired = map[string]bool{
+	"deploy-swap": true, // replaced by teams-deploy (v0.1.9)
+}
+
+// Retired reports whether a widget type was removed from the dashboard.
+func Retired(id string) bool { return retired[id] }
 
 // Definition describes a widget type the dashboard can render.
 type Definition struct {
@@ -86,7 +95,7 @@ var catalog = []Definition{
 		Description: "Claude에 연결된 Linear 커넥터로 가져온 내 이슈",
 		Source:      SourceClaude,
 		Settings: []SettingSpec{
-			{Key: "teams", Label: "팀 키 (비우면 전체)", Kind: KindStringList, Default: []string{}},
+			{Key: "teams", Label: "팀 키 (비우면 전체, 예: GRO)", Kind: KindStringList, Default: []string{}},
 			{Key: "states", Label: "상태 (비우면 전체)", Kind: KindStringList, Default: []string{}},
 		},
 	},
@@ -97,6 +106,7 @@ var catalog = []Definition{
 		Source:      SourceClaude,
 		Settings: []SettingSpec{
 			{Key: "unreadOnly", Label: "안 읽은 것만", Kind: KindBool, Default: true},
+			{Key: "teams", Label: "팀 키 (비우면 전체, 예: GRO)", Kind: KindStringList, Default: []string{}},
 		},
 	},
 	{
@@ -109,13 +119,16 @@ var catalog = []Definition{
 		},
 	},
 	{
-		ID:          DeploySwap,
-		Name:        "배포·스왑 대기",
-		Description: "머지됐지만 운영에 반영(스왑)되지 않은 배포",
-		Source:      SourceLocal,
+		ID:          TeamsDeploy,
+		Name:        "Teams 배포 알림",
+		Description: "Claude에 연결된 Microsoft 365 커넥터로 Teams 배포 알림방을 읽어, 고른 서비스의 배포 카드만 보여 줍니다",
+		Source:      SourceClaude,
+		Multiple:    true,
 		Settings: []SettingSpec{
-			{Key: "command", Label: "상태 조회 명령", Kind: KindString, Default: ""},
-			{Key: "staleDays", Label: "경고 기준(일)", Kind: KindInt, Default: 1, Min: 0, Max: 60},
+			{Key: "chat", Label: "채팅방 링크", Kind: KindString, Default: "", Description: "Teams 에서 채팅방 「링크 복사」로 얻은 주소"},
+			{Key: "tags", Label: "서비스 태그 (비우면 전체, 예: groupware-frontend, groupware)", Kind: KindStringList, Default: []string{}},
+			{Key: "me", Label: "내 GitHub 아이디 (내 PR 표시)", Kind: KindString, Default: ""},
+			{Key: "limit", Label: "보여 줄 카드 수", Kind: KindInt, Default: 8, Min: 1, Max: 30},
 		},
 	},
 	{

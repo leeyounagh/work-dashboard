@@ -33,13 +33,18 @@ Claude 화면에서 마우스로 드래그해 선택하면 바로 클립보드�
   파일 이름·경로 검색도 됩니다. 앱을 다시 켜면 열려 있던 Claude 대화를 이어서 열 수 있습니다.
 - **처음 켜지는 위젯** — 새 워크스페이스는 이 컴퓨터에서 바로 쓸 수 있는 위젯만 켜고 시작합니다.
   폴더가 GitHub 레포이고 `gh` 에 로그인돼 있으면 그 레포의 PR 위젯, git 레포면 워크트리, 그리고 항상 오늘 할 일·Claude 한도·세션 복원.
-  Linear · Notion · 배포 · QA 처럼 계정이나 설정이 필요한 위젯은 꺼진 채로 「위젯 관리」에 있고,
+  Linear · Notion · Teams · QA 처럼 계정이나 설정이 필요한 위젯은 꺼진 채로 「위젯 관리」에 있고,
   설정이 덜 된 위젯은 오류 대신 무엇을 넣으면 되는지 알려 줍니다.
 - **켜고 끄는 위젯**
   - PR 리뷰 현황, CI 실패 PR, 리뷰 요청 큐 (GitHub CLI)
   - Linear 내 이슈(할 일 → 진행 중 → 리뷰·확인 중으로 묶음), Linear 알림(나를 부르거나 내가 담당인 것만), Notion 명세 —
     Claude Code 에 이미 연결한 커넥터를 읽기 전용 도구로만 씁니다. 토큰을 따로 발급하지 않아도 됩니다.
-  - 배포·스왑 대기, 워크트리 상태, QA 실행, Claude 한도·로그인, 세션 복원
+    두 Linear 위젯 모두 「팀 키」(예: GRO, CRS)로 워크스페이스마다 자기 도메인만 볼 수 있습니다.
+  - **Teams 배포 알림** (여러 개 추가 가능): Microsoft 365 커넥터로 배포 알림 채팅방의 카드를 읽고,
+    `[groupware]` · `[cruise]` 같은 서비스 태그로 걸러 워크스페이스마다 자기 서비스 배포만 보여 줍니다.
+    채팅방은 Teams 「링크 복사」 주소를 넣고, 내 GitHub 아이디를 넣으면 내 PR 이 표시됩니다.
+    한 번 읽은 카드는 저장해 두고 새 카드만 읽습니다 (첫 읽기 약 $0.1, 이어 읽기 약 $0.01).
+  - 워크트리 상태, QA 실행, Claude 한도·로그인, 세션 복원
   - 오늘 할 일: 적고 체크, 끝낸 항목은 다음 날 정리
   - 직접 만드는 위젯 (여러 개 추가 가능): **명령 출력**(셸 없이 실행), **링크 모음**, **폴더 문서**(최근 수정 순, 누르면 기본 앱으로 열기)
   - 문서 위젯(폴더 문서·Notion 명세·QA 보고서)에는 검색창이 있습니다
@@ -153,14 +158,18 @@ A mouse selection in Claude is copied straight to the clipboard; hold **Option**
   viewer. File name/path search, and Claude conversations that were open can be resumed after a restart.
 - **What starts switched on** — a new workspace turns on only the widgets that work on this computer: PR widgets
   for the folder's GitHub repositories when `gh` is logged in, worktrees for git folders, and always to-dos, Claude usage and
-  session restore. Linear, Notion, deploy status and QA need an account or settings, so they wait in widget management;
+  session restore. Linear, Notion, Teams and QA need an account or settings, so they wait in widget management;
   a widget that isn't set up yet says what to fill in instead of showing an error.
 - **Toggleable widgets**
   - PR reviews, CI failures, review queue (GitHub CLI)
   - My Linear issues (grouped: to do → in progress → in review/test), Linear inbox (only mentions, assignments and my
     own issues), Notion specs — through the connectors you already set up in Claude Code, with read-only tools only.
-    No extra API tokens.
-  - Deploy/swap status, worktrees, QA runs, Claude usage limits & login, session restore
+    No extra API tokens. Both Linear widgets take team keys (e.g. GRO, CRS), so each workspace sees its own domain.
+  - **Teams deploy notifications** (can be added several times): reads the deploy cards of a Teams chat through the
+    Microsoft 365 connector and filters them by service tag (`[groupware]`, `[cruise]`, …), so each workspace shows
+    only its own deploys. Paste the chat's "Copy link" address; add your GitHub login to mark your PRs. Cards are kept
+    once read, so later refreshes only read new ones (about $0.1 the first time, about $0.01 after).
+  - Worktrees, QA runs, Claude usage limits & login, session restore
   - Today's to-dos: write, tick, finished items are cleared the next day
   - Your own widgets, as many as you like: **command output** (no shell), **links**, **folder documents** (newest first,
     opens with the default app)
@@ -256,14 +265,16 @@ cd frontend && npm test
 main.go, app.go           Wails entry point and the methods bound to the UI
 terminals.go, agents.go   terminals, Claude sessions, hook events
 officetokens.go           session token counts for the office
-widgets.go, localwidgets.go, folderwidget.go, linearfilter.go, recommend.go, guide.go
+widgets.go, localwidgets.go, folderwidget.go, linearfilter.go, teamswidget.go, recommend.go, guide.go
                           widget data, recommendations, office guide
+mcpservers.go             MCP servers a connector lookup hides (keeps its context small)
 internal/widget           widget catalog + setting validation
 internal/workspace        workspace model + JSON store
 internal/term             pseudo-terminal sessions (ConPTY via go-pty)
 internal/launch           workspace → claude / shell command lines, settings.json
 internal/bridge           localhost bridge for Claude hooks and the open_files MCP tool
 internal/claudeask        headless `claude -p` lookups through connectors
+internal/teamsdeploy      Teams deploy cards: parse, store, filter by service
 internal/command          no-shell command runner for the command widget
 internal/files            file tree, viewer, search (kept inside the workspace)
 internal/tokens           transcript token reader + daily totals (tokens.json)

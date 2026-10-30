@@ -21,18 +21,6 @@ describe('renderLocal', () => {
     expect(el.textContent).toContain('not a git repo');
   });
 
-  it('shows deploy rows or falls back to text', () => {
-    const rows = renderLocal('deploy-swap', {
-      rows: [{ name: 'Shop frontend prod', state: 'pending', waitingDays: 6.2, stale: true, staging: { number: 927, title: 't', url: 'https://x/927' } }],
-      pending: 1, unknown: 2, exitCode: 0,
-    }, open)!;
-    expect(rows.textContent).toContain('스왑 대기 6.2일');
-    expect(rows.textContent).toContain('확인 불가 2');
-    const text = renderLocal('deploy-swap', { rows: [], pending: 0, unknown: 0, text: 'table', exitCode: 1 }, open)!;
-    expect(text.querySelector('pre')?.textContent).toBe('table');
-    expect(text.textContent).toContain('종료 코드 1');
-  });
-
   it('renders Linear issues and Notion pages with the cache note', () => {
     const lin = renderLocal('linear-issues', { issues: [{ id: 'GRO-1', title: '제목', state: 'In Review', team: 'GRO', url: 'https://linear.app/x', priority: 'High' }], fetchedAt: '2026-10-23T01:00:00Z', costUsd: 0.018 }, open)!;
     expect(lin.textContent).toContain('GRO-1');
@@ -41,6 +29,27 @@ describe('renderLocal', () => {
     expect(open).toHaveBeenCalledWith('https://linear.app/x');
     const notion = renderLocal('notion-specs', { pages: [{ id: 'p', title: '근태 명세', url: '', version: 'Ver 1.2.0', lastEdited: '' }], fetchedAt: '', costUsd: 0 }, open)!;
     expect(notion.textContent).toContain('Ver 1.2.0');
+  });
+
+  it('renders Teams deploy cards with my PRs marked and shared redeploys counted', () => {
+    const pr = (number: number, author: string, shared = false) => ({ number, title: `PR ${number}`, author, url: `https://github.com/o/r/pull/${number}`, shared });
+    const card = (id: string, env: string, status: string, prs: ReturnType<typeof pr>[]) => ({ id, createdAt: '2026-10-29T14:17:05Z', webUrl: 'https://teams.microsoft.com/l/message/x', status, tag: 'groupware', env, image: '1.0.496', prs });
+    const el = renderLocal(
+      'teams-deploy',
+      { cards: [card('1', 'TEST', '✅', [pr(2023, 'LeeYounagh'), pr(1765, 'other', true)]), card('2', 'PROD', '❌', [pr(7, 'other')])], tags: ['groupware'], me: 'leeyounagh', fetchedAt: '', costUsd: 0.02 },
+      open,
+    )!;
+    expect(el.querySelector('.w-summary')?.textContent).toBe('groupware · 2건');
+    const [ok, failed] = el.querySelectorAll('.w-item');
+    expect(ok.textContent).toContain('내 PR 포함');
+    expect(ok.textContent).toContain('공유 코드로 함께 재배포된 PR 1건');
+    expect(ok.textContent).not.toContain('PR 1765');
+    expect(failed.classList.contains('attention')).toBe(true);
+    expect(failed.textContent).not.toContain('내 PR');
+    ok.querySelector<HTMLButtonElement>('.w-pr-num')!.click();
+    expect(open).toHaveBeenCalledWith('https://github.com/o/r/pull/2023');
+    const empty = renderLocal('teams-deploy', { cards: null, tags: null, me: '', fetchedAt: '', costUsd: 0 }, open)!;
+    expect(empty.textContent).toContain('전체 서비스 · 0건');
   });
 
   it('groups my Linear issues with work to do first', () => {

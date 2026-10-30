@@ -15,7 +15,6 @@ import (
 	"github.com/leeyounagh/work-dashboard/internal/bridge"
 	"github.com/leeyounagh/work-dashboard/internal/sessions"
 	"github.com/leeyounagh/work-dashboard/internal/widget"
-	"github.com/leeyounagh/work-dashboard/internal/widgetdata"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
@@ -51,9 +50,19 @@ func TestLinearWidgetUsesConnectorAndCaches(t *testing.T) {
 	if len(d.Issues) != 1 || d.Issues[0].ID != "GRO-1" || d.CostUSD != 0.02 {
 		t.Fatalf("linear = %+v", d)
 	}
-	if !strings.Contains(strings.Join(*args, " "), "Only teams: GRO") {
+	if !strings.Contains(strings.Join(*args, " "), "teams GRO, call the Linear list_issues tool once with team set") {
 		t.Fatalf("prompt missing team filter: %q", *args)
 	}
+	// Issues of other teams are dropped even if Claude returns them.
+	other, err := h.app.SaveWorkspace(workspace.Workspace{Name: "cruise", Folders: []string{t.TempDir()}, Widgets: []widget.Instance{
+		{Type: widget.LinearIssues, Enabled: true, Settings: map[string]any{"teams": []any{"CRS"}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := h.app.WidgetData(other.ID, 0).Data.(LinearData); len(d.Issues) != 0 {
+		t.Fatalf("CRS workspace got %+v", d.Issues)
+	}
+	calls.Store(1)
 	h.app.WidgetData(ws.ID, 0)
 	if calls.Load() != 1 {
 		t.Fatalf("calls = %d, want cached", calls.Load())
@@ -126,31 +135,6 @@ func TestNotionWidget(t *testing.T) {
 	}
 	if !slices.Contains(*args, "mcp__claude_ai_Notion__notion-fetch") {
 		t.Fatalf("args = %q", *args)
-	}
-}
-
-func TestDeployWidget(t *testing.T) {
-	report := filepath.Join(t.TempDir(), "report.json")
-	body := `{"rows":[{"domain":"Shop","kind":"frontend","env":"prod","status":{"state":"pending","lagMs":172800000}}]}`
-	if err := os.WriteFile(report, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cmd := `cmd /c type "` + report + `"`
-	if runtime.GOOS != "windows" {
-		cmd = `cat "` + report + `"`
-	}
-	h, ws, _, _ := localHarness(t, widget.Instance{Type: widget.DeploySwap, Enabled: true, Settings: map[string]any{"command": cmd}})
-	res := h.app.WidgetData(ws.ID, 0)
-	if res.Error != "" {
-		t.Fatal(res.Error)
-	}
-	d := res.Data.(widgetdata.DeployData)
-	if d.Pending != 1 || !d.Rows[0].Stale || d.Rows[0].WaitingDays != 2 {
-		t.Fatalf("deploy = %+v", d)
-	}
-	h2, ws2, _, _ := localHarness(t, widget.Instance{Type: widget.DeploySwap, Enabled: true})
-	if res := h2.app.WidgetData(ws2.ID, 0); !strings.Contains(res.Setup, "명령") {
-		t.Fatalf("missing command setup hint = %q", res.Setup)
 	}
 }
 
@@ -267,8 +251,8 @@ func TestWidgetTimeouts(t *testing.T) {
 	if widgetTimeout(widget.LinearIssues) < 3*time.Minute || widgetTimeout(widget.NotionSpecs) < 3*time.Minute {
 		t.Fatal("connector lookups take about a minute; they need minutes, not seconds")
 	}
-	if widgetTimeout(widget.DeploySwap) < time.Minute {
-		t.Fatal("deploy status probes many slots")
+	if widgetTimeout(widget.Command) < time.Minute {
+		t.Fatal("commands may take a while")
 	}
 	if widgetTimeout(widget.PRReviews) > time.Minute {
 		t.Fatal("gh searches should stay short")
@@ -282,17 +266,6 @@ func TestMissingConnectorAsksForSetup(t *testing.T) {
 	}
 	if res := h.app.WidgetData(ws.ID, 0); !strings.Contains(res.Setup, "커넥터") {
 		t.Fatalf("res = %+v, want a connector setup hint instead of an empty list", res)
-	}
-}
-
-func TestDeployEmptyOutputIsAnError(t *testing.T) {
-	cmd := `cmd /c exit 0`
-	if runtime.GOOS != "windows" {
-		cmd = `true`
-	}
-	h, ws, _, _ := localHarness(t, widget.Instance{Type: widget.DeploySwap, Enabled: true, Settings: map[string]any{"command": cmd}})
-	if res := h.app.WidgetData(ws.ID, 0); !strings.Contains(res.Error, "출력") {
-		t.Fatalf("res = %+v", res)
 	}
 }
 
@@ -395,6 +368,34 @@ func TestLinearInboxWidget(t *testing.T) {
 	}
 	if !strings.Contains(joined, "unreadOnly true") || !strings.Contains(joined, "list_issues") {
 		t.Fatalf("unreadOnly not in prompt: %q", joined)
+	}
+	// Per workspace teams: CRS keeps only what is not about a GRO issue.
+	cr, err := h.app.SaveWorkspace(workspace.Workspace{Name: "cruise", Folders: []string{t.TempDir()}, Widgets: []widget.Instance{
+		{Type: widget.LinearInbox, Enabled: true, Settings: map[string]any{"teams": []any{"crs"}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := h.app.WidgetData(cr.ID, 0).Data.(LinearInboxData); len(d.Notifications) != 1 || d.Notifications[0].ID != "n2" || d.Unread != 0 {
+		t.Fatalf("CRS inbox = %+v", d)
+	}
+}
+
+func TestLinearTeamFilters(t *testing.T) {
+	issues := []LinearIssue{{ID: "GRO-1", State: "Todo"}, {ID: "CRS-2", State: "In Review"}, {ID: "X-3", Team: "Groupware", State: "Todo"}}
+	ids := func(in []LinearIssue) (out []string) {
+		for _, is := range in {
+			out = append(out, is.ID)
+		}
+		return out
+	}
+	if got := ids(filterLinearIssues(issues, []string{"gro", "Groupware"}, nil)); !slices.Equal(got, []string{"GRO-1", "X-3"}) {
+		t.Fatalf("teams = %v", got)
+	}
+	if got := ids(filterLinearIssues(issues, nil, []string{"in review"})); !slices.Equal(got, []string{"CRS-2"}) {
+		t.Fatalf("states = %v", got)
+	}
+	if got := filterLinearIssues(issues, nil, nil); len(got) != 3 {
+		t.Fatalf("no filter = %v", got)
 	}
 }
 

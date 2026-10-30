@@ -68,6 +68,9 @@ type Deps struct {
 	Now func() time.Time
 	// Ask runs headless claude for connector lookups (Linear, Notion).
 	Ask claudeask.Runner
+	// MCPServers lists the user's MCP servers as tool prefixes, so lookups can
+	// hide the ones they do not use; nil hides none.
+	MCPServers func(ctx context.Context) ([]string, error)
 	// Sessions remembers Claude sessions for resuming.
 	Sessions sessionStore
 	// CharactersDir holds the user's own character sprite sheets.
@@ -91,6 +94,7 @@ type App struct {
 	tokens *tokenTracker
 	prs    prCache
 	asks   askCache
+	mcp    mcpCache
 	// shuttingDown keeps sessions killed by app exit marked open, so they
 	// can be offered for restore next time.
 	shuttingDown atomic.Bool

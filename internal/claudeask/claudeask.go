@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/leeyounagh/work-dashboard/internal/launch"
@@ -27,13 +29,15 @@ type Request struct {
 	AllowedTools    []string
 	DisallowedTools []string // a second line of defense (write tools by name)
 	Model           string   // default "haiku": cheap and fast enough for lookups
+	// MaxBudgetUSD overrides defaultBudgetUSD for lookups that read a lot.
+	MaxBudgetUSD float64
 	// NoMCP is for plain questions: no MCP servers or connectors and no
 	// user/local settings (so no allow rules of the user's) at all.
 	NoMCP bool
 }
 
-// maxBudgetUSD caps one lookup's cost.
-const maxBudgetUSD = "0.25"
+// defaultBudgetUSD caps one lookup's cost.
+const defaultBudgetUSD = 0.25
 
 // Answer is the structured result.
 type Answer struct {
@@ -70,6 +74,10 @@ func Args(r Request) []string {
 	if model == "" {
 		model = "haiku"
 	}
+	budget := r.MaxBudgetUSD
+	if budget <= 0 {
+		budget = defaultBudgetUSD
+	}
 	args := []string{
 		"-p",
 		"--model", model,
@@ -80,7 +88,7 @@ func Args(r Request) []string {
 		// Not prompting; tools not allowed here are denied. The user's own allow
 		// rules still apply, so connector lookups also pass DisallowedTools.
 		"--permission-mode", "dontAsk",
-		"--max-budget-usd", maxBudgetUSD,
+		"--max-budget-usd", strconv.FormatFloat(budget, 'f', -1, 64),
 	}
 	if r.NoMCP {
 		// Connector lookups need user settings (claude.ai connectors did not
@@ -139,4 +147,40 @@ func Ask(ctx context.Context, run Runner, dir string, r Request) (Answer, error)
 		return Answer{CostUSD: res.TotalCostUSD}, errors.New("claude 가 정해진 형식으로 답하지 않았습니다")
 	}
 	return Answer{Output: res.StructuredOutput, CostUSD: res.TotalCostUSD}, nil
+}
+
+var notToolName = regexp.MustCompile(`[^A-Za-z0-9_-]`)
+
+// ParseServers reads `claude mcp list` output into tool name prefixes, e.g.
+// "claude.ai Notion: https://… - ✔ Connected" becomes "mcp__claude_ai_Notion".
+func ParseServers(out string) []string {
+	var servers []string
+	for _, line := range strings.Split(out, "\n") {
+		name, rest, ok := strings.Cut(strings.TrimSpace(line), ": ")
+		if !ok || name == "" || !strings.Contains(rest, " - ") {
+			continue
+		}
+		servers = append(servers, "mcp__"+notToolName.ReplaceAllString(name, "_"))
+	}
+	return servers
+}
+
+// HideOthers returns deny rules for the servers none of the allowed tools
+// belongs to. A lookup otherwise carries every connected server's tool
+// definitions: with a few connectors that was 170k tokens (about $0.17) per
+// lookup, against 24k with only the server it uses.
+func HideOthers(servers, allowed []string) []string {
+	keep := map[string]bool{}
+	for _, t := range allowed {
+		if server, _, ok := strings.Cut(strings.TrimPrefix(t, "mcp__"), "__"); ok {
+			keep["mcp__"+server] = true
+		}
+	}
+	var deny []string
+	for _, s := range servers {
+		if !keep[s] {
+			deny = append(deny, s)
+		}
+	}
+	return deny
 }

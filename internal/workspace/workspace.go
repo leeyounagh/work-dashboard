@@ -102,3 +102,14 @@ func folderKey(folder string) string {
 	}
 	return key
 }
+
+// withoutRetired drops widgets whose type was removed from the dashboard.
+func withoutRetired(in []widget.Instance) []widget.Instance {
+	out := make([]widget.Instance, 0, len(in))
+	for _, inst := range in {
+		if !widget.Retired(inst.Type) {
+			out = append(out, inst)
+		}
+	}
+	return out
+}
