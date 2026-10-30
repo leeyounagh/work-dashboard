@@ -285,6 +285,22 @@ interface LinearInboxData {
   costUsd: number;
 }
 
+interface TeamsPR {
+  number: number;
+  title: string;
+  author: string;
+  url: string;
+  shared: boolean;
+}
+
+interface TeamsDeployData {
+  cards: Array<{ id: string; createdAt: string; webUrl: string; status: string; tag: string; env: string; image: string; prs: TeamsPR[] | null }> | null;
+  tags: string[] | null;
+  me: string;
+  fetchedAt: string;
+  costUsd: number;
+}
+
 const KIND_LABEL: Record<string, string> = {
   mention: '멘션',
   assigned: '배정',
@@ -327,6 +343,43 @@ export function renderLinearInbox(d: LinearInboxData, open: OpenURL): HTMLElemen
   return box;
 }
 
+function teamsPRRow(p: TeamsPR, mine: boolean, open: OpenURL): HTMLElement {
+  const row = h('div', 'w-pr-title');
+  row.append(p.url ? link(`#${p.number}`, p.url, open, 'w-link w-pr-num') : h('span', 'w-pr-num', `#${p.number}`));
+  const title = h('span', 'w-pr-text', p.title);
+  title.title = p.title;
+  row.append(title, h('span', mine ? 'w-chip ok' : 'muted small-inline', mine ? '내 PR' : p.author));
+  return row;
+}
+
+/** Deploy cards from a Teams chat, newest first: the service's own PRs, shared-code redeploys only counted. */
+export function renderTeamsDeploy(d: TeamsDeployData, open: OpenURL): HTMLElement {
+  const box = h('div', 'w-list');
+  const cards = d.cards ?? [];
+  const me = d.me.toLowerCase();
+  const isMine = (p: TeamsPR) => !!me && !p.shared && p.author.toLowerCase() === me;
+  box.append(h('div', 'w-summary', `${(d.tags ?? []).join(', ') || '전체 서비스'} · ${cards.length}건`));
+  if (!cards.length) box.append(h('p', 'muted small', '최근 배포 알림이 없습니다.'));
+  for (const c of cards) {
+    const prs = c.prs ?? [];
+    const item = h('div', c.status === '✅' ? 'w-item' : 'w-item attention');
+    const head = h('div', 'w-pr-title');
+    head.append(h('span', c.env === 'PROD' ? 'w-chip warn' : 'w-chip', c.env), h('span', 'w-chip muted', c.tag));
+    head.append(h('span', 'w-pr-text', `${c.status} ${c.image ? `이미지 ${c.image}` : '배포'}`));
+    if (prs.some(isMine)) head.append(h('span', 'w-chip ok', '내 PR 포함'));
+    const meta = h('div', 'w-meta');
+    meta.append(h('span', 'muted', dateText(c.createdAt)));
+    if (c.webUrl) meta.append(link('Teams 원본', c.webUrl, open));
+    item.append(head, meta);
+    for (const p of prs.filter((p) => !p.shared)) item.append(teamsPRRow(p, isMine(p), open));
+    const shared = prs.filter((p) => p.shared).length;
+    if (shared) item.append(h('p', 'muted small', `공유 코드로 함께 재배포된 PR ${shared}건`));
+    box.append(item);
+  }
+  box.append(costNote(d.fetchedAt, d.costUsd));
+  return box;
+}
+
 /** Renderers for local / Claude-connector widgets; null when the type is not one of them. */
 export function renderLocal(type: string, data: unknown, open: OpenURL, actions?: WidgetActions): HTMLElement | null {
   switch (type) {
@@ -348,6 +401,8 @@ export function renderLocal(type: string, data: unknown, open: OpenURL, actions?
       return renderLinks(data as LinksData, open);
     case 'linear-inbox':
       return renderLinearInbox(data as LinearInboxData, open);
+    case 'teams-deploy':
+      return renderTeamsDeploy(data as TeamsDeployData, open);
     case 'folder-files':
       return renderFolderFiles(data as FolderFilesData, actions);
     case 'todo':

@@ -38,7 +38,7 @@ func TestDefaultWidgetsFollowTheEnvironment(t *testing.T) {
 		}
 	}
 	// Widgets that need an account or setup of their own are never on by default.
-	for _, off := range []string{widget.LinearIssues, widget.LinearInbox, widget.NotionSpecs, widget.DeploySwap, widget.QA2Pass} {
+	for _, off := range []string{widget.LinearIssues, widget.LinearInbox, widget.NotionSpecs, widget.TeamsDeploy, widget.DeploySwap, widget.QA2Pass} {
 		if slices.Contains(all, off) {
 			t.Errorf("%s should start off: %v", off, all)
 		}

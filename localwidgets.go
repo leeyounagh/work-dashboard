@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -198,6 +199,8 @@ func (a *App) buildLocalWidget(ctx context.Context, ws workspace.Workspace, typ 
 		return a.linearInbox(ctx, s, fresh)
 	case widget.NotionSpecs:
 		return a.notion(ctx, s, fresh)
+	case widget.TeamsDeploy:
+		return a.teamsDeploy(ctx, s, fresh)
 	case widget.QA2Pass:
 		return a.qa(s)
 	case widget.SessionRestore:
@@ -311,6 +314,9 @@ func (a *App) ask(ctx context.Context, r claudeask.Request, out any) (float64, e
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return 0, err
 	}
+	if !r.NoMCP {
+		r.DisallowedTools = append(slices.Clone(r.DisallowedTools), claudeask.HideOthers(a.mcpServers(ctx), r.AllowedTools)...)
+	}
 	ans, err := claudeask.Ask(ctx, a.deps.Ask, dir, r)
 	if ctx.Err() != nil {
 		return ans.CostUSD, errors.New("Claude 응답이 시간 안에 오지 않았습니다. 잠시 뒤 새로고침하세요")
@@ -345,18 +351,19 @@ func (a *App) linear(ctx context.Context, s widgetdata.Settings, fresh bool) (an
 	}
 	// Asking for exact fields keeps issue descriptions out of the context:
 	// with them a long list went over the lookup's budget.
-	prompt := "Call the Linear list_issues tool once with assignee \"me\", limit 100 and fields" +
-		" [\"id\",\"title\",\"status\",\"statusType\",\"priority\",\"url\",\"team\",\"updatedAt\"]." +
-		" Keep the issues whose statusType is not completed or canceled; give state (the status name) and statusType."
+	// The team goes into the tool call: fetching every team at once took
+	// minutes (240 open issues). Teams and states are also checked here.
+	call := "Call the Linear list_issues tool once"
 	if len(teams) > 0 {
-		prompt += " Only teams: " + strings.Join(teams, ", ") + "."
+		call = "For each of the teams " + strings.Join(teams, ", ") + ", call the Linear list_issues tool once with team set to it,"
 	}
-	if len(states) > 0 {
-		prompt += " Only states: " + strings.Join(states, ", ") + "."
-	}
-	prompt += " Return them in the structured output, most recently updated first. Set connectorAvailable to false if no Linear tools are available. Do not change anything in Linear."
-	key := "linear:" + strings.Join(teams, ",") + "|" + strings.Join(states, ",")
-	return a.cachedAsk(key, fresh, func() (any, error) {
+	prompt := call + " with assignee \"me\", limit 100 and fields" +
+		" [\"id\",\"title\",\"status\",\"statusType\",\"priority\",\"url\",\"team\",\"updatedAt\"]." +
+		" Keep the issues whose statusType is not completed or canceled; give state (the status name), statusType" +
+		" and the team's name. Return them in the structured output, most recently updated first. Set" +
+		" connectorAvailable to false if no Linear tools are available. Do not change anything in Linear."
+	key := "linear:" + strings.ToUpper(strings.Join(teams, ","))
+	v, err := a.cachedAsk(key, fresh, func() (any, error) {
 		var out struct {
 			ConnectorAvailable bool          `json:"connectorAvailable"`
 			Issues             []LinearIssue `json:"issues"`
@@ -376,6 +383,12 @@ func (a *App) linear(ctx context.Context, s widgetdata.Settings, fresh bool) (an
 		out.Issues = groupLinearIssues(out.Issues)
 		return LinearData{Issues: out.Issues, FetchedAt: time.Now(), CostUSD: cost}, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	d := v.(LinearData)
+	d.Issues = filterLinearIssues(d.Issues, teams, states)
+	return d, nil
 }
 
 var notionSchema = json.RawMessage(`{"type":"object","properties":{"connectorAvailable":{"type":"boolean"},
@@ -557,6 +570,10 @@ var linearInboxSchema = json.RawMessage(`{"type":"object","properties":{"connect
 
 func (a *App) linearInbox(ctx context.Context, s widgetdata.Settings, fresh bool) (any, error) {
 	unreadOnly := s.Bool("unreadOnly", true)
+	teams := s.Strings("teams")
+	if err := checkFilters("팀", teams, filterPattern); err != nil {
+		return nil, err
+	}
 	// Claude only fetches; which notifications concern me is decided here.
 	prompt := "Using the Linear MCP tools: 1) call list_issues once with assignee \"me\", limit 250 and fields [\"id\"]," +
 		" and put every identifier (like GRO-123) in myIssues. 2) Call get_notifications once with limit 50"
@@ -567,7 +584,7 @@ func (a *App) linearInbox(ctx context.Context, s widgetdata.Settings, fresh bool
 		" read, and its url. Set connectorAvailable to false if no Linear tools are available. Do not mark anything as" +
 		" read and do not change anything in Linear."
 	key := fmt.Sprintf("linear-inbox:%v", unreadOnly)
-	return a.cachedAsk(key, fresh, func() (any, error) {
+	v, err := a.cachedAsk(key, fresh, func() (any, error) {
 		var out struct {
 			ConnectorAvailable bool                 `json:"connectorAvailable"`
 			MyIssues           []string             `json:"myIssues"`
@@ -585,11 +602,21 @@ func (a *App) linearInbox(ctx context.Context, s widgetdata.Settings, fresh bool
 			if !linearURL.MatchString(n.URL) {
 				n.URL = ""
 			}
-			if !n.Read {
-				d.Unread++
-			}
 			d.Notifications = append(d.Notifications, n)
 		}
 		return d, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	// Shared by every workspace; each keeps its own teams' notifications.
+	d := v.(LinearInboxData)
+	d.Notifications = filterNotificationsByTeam(d.Notifications, teams)
+	d.Unread = 0
+	for _, n := range d.Notifications {
+		if !n.Read {
+			d.Unread++
+		}
+	}
+	return d, nil
 }

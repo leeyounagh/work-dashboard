@@ -21,6 +21,7 @@ const (
 	LinearIssues   = "linear-issues"
 	LinearInbox    = "linear-inbox"
 	NotionSpecs    = "notion-specs"
+	TeamsDeploy    = "teams-deploy"
 	DeploySwap     = "deploy-swap"
 	Worktrees      = "worktrees"
 	QA2Pass        = "qa-2pass"
@@ -86,7 +87,7 @@ var catalog = []Definition{
 		Description: "Claude에 연결된 Linear 커넥터로 가져온 내 이슈",
 		Source:      SourceClaude,
 		Settings: []SettingSpec{
-			{Key: "teams", Label: "팀 키 (비우면 전체)", Kind: KindStringList, Default: []string{}},
+			{Key: "teams", Label: "팀 키 (비우면 전체, 예: GRO)", Kind: KindStringList, Default: []string{}},
 			{Key: "states", Label: "상태 (비우면 전체)", Kind: KindStringList, Default: []string{}},
 		},
 	},
@@ -97,6 +98,7 @@ var catalog = []Definition{
 		Source:      SourceClaude,
 		Settings: []SettingSpec{
 			{Key: "unreadOnly", Label: "안 읽은 것만", Kind: KindBool, Default: true},
+			{Key: "teams", Label: "팀 키 (비우면 전체, 예: GRO)", Kind: KindStringList, Default: []string{}},
 		},
 	},
 	{
@@ -106,6 +108,19 @@ var catalog = []Definition{
 		Source:      SourceClaude,
 		Settings: []SettingSpec{
 			{Key: "pages", Label: "페이지 ID", Kind: KindStringList, Default: []string{}},
+		},
+	},
+	{
+		ID:          TeamsDeploy,
+		Name:        "Teams 배포 알림",
+		Description: "Claude에 연결된 Microsoft 365 커넥터로 Teams 배포 알림방을 읽어, 고른 서비스의 배포 카드만 보여 줍니다",
+		Source:      SourceClaude,
+		Multiple:    true,
+		Settings: []SettingSpec{
+			{Key: "chat", Label: "채팅방 링크", Kind: KindString, Default: "", Description: "Teams 에서 채팅방 「링크 복사」로 얻은 주소"},
+			{Key: "tags", Label: "서비스 태그 (비우면 전체, 예: groupware-frontend, groupware)", Kind: KindStringList, Default: []string{}},
+			{Key: "me", Label: "내 GitHub 아이디 (내 PR 표시)", Kind: KindString, Default: ""},
+			{Key: "limit", Label: "보여 줄 카드 수", Kind: KindInt, Default: 8, Min: 1, Max: 30},
 		},
 	},
 	{

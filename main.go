@@ -35,6 +35,16 @@ var assets embed.FS
 // window does not flash a different colour before the page paints.
 var windowBackground = &options.RGBA{R: 0x1e, G: 0x1f, B: 0x22, A: 0xff}
 
+// listMCPServers asks claude for the user's MCP servers (it health-checks
+// them, a few seconds).
+func listMCPServers(ctx context.Context) ([]string, error) {
+	out, err := askClaude(ctx, os.TempDir(), "mcp", "list")
+	if err != nil {
+		return nil, err
+	}
+	return claudeask.ParseServers(string(out)), nil
+}
+
 // askClaude runs headless claude (resolved on each call, so installing Claude
 // Code while the app runs works).
 func askClaude(ctx context.Context, dir string, args ...string) ([]byte, error) {
@@ -109,6 +119,7 @@ func main() {
 		Bridge:        br,
 		GitHub:        github.GH,
 		Ask:           askClaude,
+		MCPServers:    listMCPServers,
 		Sessions:      sessionStore,
 		Restorable:    restorable,
 		CharactersDir: filepath.Join(filepath.Dir(dir), "characters"),
