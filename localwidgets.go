@@ -191,8 +191,6 @@ func (a *App) buildLocalWidget(ctx context.Context, ws workspace.Workspace, typ 
 	switch typ {
 	case widget.Worktrees:
 		return a.worktrees(ctx, ws, s)
-	case widget.DeploySwap:
-		return a.deploy(ctx, ws, s)
 	case widget.LinearIssues:
 		return a.linear(ctx, s, fresh)
 	case widget.LinearInbox:
@@ -239,34 +237,6 @@ func (a *App) worktrees(ctx context.Context, ws workspace.Workspace, s widgetdat
 		}
 	}
 	sort.SliceStable(d.Items, func(i, j int) bool { return d.Items[i].Behind > d.Items[j].Behind })
-	return d, nil
-}
-
-func (a *App) deploy(ctx context.Context, ws workspace.Workspace, s widgetdata.Settings) (widgetdata.DeployData, error) {
-	line := s.String("command", "")
-	if line == "" {
-		return widgetdata.DeployData{}, needsSetup{"「설정」에 배포 상태를 JSON 으로 출력하는 명령을 넣으면 보입니다 (예: node <deploy-status>/scripts/index.mjs --json)"}
-	}
-	dir, _ := os.UserHomeDir()
-	if len(ws.Folders) > 0 {
-		dir = ws.Folders[0]
-	}
-	out, err := command.Run(ctx, dir, line)
-	if err != nil {
-		return widgetdata.DeployData{}, err
-	}
-	if ctx.Err() != nil {
-		return widgetdata.DeployData{}, errors.New("배포 상태 명령이 시간 안에 끝나지 않았습니다")
-	}
-	if strings.TrimSpace(out.Stdout) == "" {
-		msg := strings.TrimSpace(out.Stderr)
-		if msg == "" {
-			msg = fmt.Sprintf("종료 코드 %d", out.ExitCode)
-		}
-		return widgetdata.DeployData{}, fmt.Errorf("배포 상태 명령이 아무것도 출력하지 않았습니다: %s", msg)
-	}
-	d := widgetdata.BuildDeploy(out.Stdout, out.ExitCode, s)
-	d.Truncated = out.Truncated
 	return d, nil
 }
 

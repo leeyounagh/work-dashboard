@@ -21,18 +21,6 @@ describe('renderLocal', () => {
     expect(el.textContent).toContain('not a git repo');
   });
 
-  it('shows deploy rows or falls back to text', () => {
-    const rows = renderLocal('deploy-swap', {
-      rows: [{ name: 'Shop frontend prod', state: 'pending', waitingDays: 6.2, stale: true, staging: { number: 927, title: 't', url: 'https://x/927' } }],
-      pending: 1, unknown: 2, exitCode: 0,
-    }, open)!;
-    expect(rows.textContent).toContain('스왑 대기 6.2일');
-    expect(rows.textContent).toContain('확인 불가 2');
-    const text = renderLocal('deploy-swap', { rows: [], pending: 0, unknown: 0, text: 'table', exitCode: 1 }, open)!;
-    expect(text.querySelector('pre')?.textContent).toBe('table');
-    expect(text.textContent).toContain('종료 코드 1');
-  });
-
   it('renders Linear issues and Notion pages with the cache note', () => {
     const lin = renderLocal('linear-issues', { issues: [{ id: 'GRO-1', title: '제목', state: 'In Review', team: 'GRO', url: 'https://linear.app/x', priority: 'High' }], fetchedAt: '2026-10-23T01:00:00Z', costUsd: 0.018 }, open)!;
     expect(lin.textContent).toContain('GRO-1');

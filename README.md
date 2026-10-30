@@ -32,7 +32,7 @@ macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 
   파일 이름·경로 검색도 됩니다. 앱을 다시 켜면 열려 있던 Claude 대화를 이어서 열 수 있습니다.
 - **처음 켜지는 위젯** — 새 워크스페이스는 이 컴퓨터에서 바로 쓸 수 있는 위젯만 켜고 시작합니다.
   폴더가 GitHub 레포이고 `gh` 에 로그인돼 있으면 그 레포의 PR 위젯, git 레포면 워크트리, 그리고 항상 오늘 할 일·Claude 한도·세션 복원.
-  Linear · Notion · 배포 · QA 처럼 계정이나 설정이 필요한 위젯은 꺼진 채로 「위젯 관리」에 있고,
+  Linear · Notion · Teams · QA 처럼 계정이나 설정이 필요한 위젯은 꺼진 채로 「위젯 관리」에 있고,
   설정이 덜 된 위젯은 오류 대신 무엇을 넣으면 되는지 알려 줍니다.
 - **켜고 끄는 위젯**
   - PR 리뷰 현황, CI 실패 PR, 리뷰 요청 큐 (GitHub CLI)
@@ -43,7 +43,7 @@ macOS 에서는 단축키가 Ctrl 대신 **Cmd** 입니다 (확대 Cmd +/−/0, 
     `[groupware]` · `[cruise]` 같은 서비스 태그로 걸러 워크스페이스마다 자기 서비스 배포만 보여 줍니다.
     채팅방은 Teams 「링크 복사」 주소를 넣고, 내 GitHub 아이디를 넣으면 내 PR 이 표시됩니다.
     한 번 읽은 카드는 저장해 두고 새 카드만 읽습니다 (첫 읽기 약 $0.1, 이어 읽기 약 $0.01).
-  - 배포·스왑 대기, 워크트리 상태, QA 실행, Claude 한도·로그인, 세션 복원
+  - 워크트리 상태, QA 실행, Claude 한도·로그인, 세션 복원
   - 오늘 할 일: 적고 체크, 끝낸 항목은 다음 날 정리
   - 직접 만드는 위젯 (여러 개 추가 가능): **명령 출력**(셸 없이 실행), **링크 모음**, **폴더 문서**(최근 수정 순, 누르면 기본 앱으로 열기)
   - 문서 위젯(폴더 문서·Notion 명세·QA 보고서)에는 검색창이 있습니다
@@ -156,7 +156,7 @@ On macOS the shortcuts use **Cmd** instead of Ctrl (zoom Cmd +/−/0, terminal c
   viewer. File name/path search, and Claude conversations that were open can be resumed after a restart.
 - **What starts switched on** — a new workspace turns on only the widgets that work on this computer: PR widgets
   for the folder's GitHub repositories when `gh` is logged in, worktrees for git folders, and always to-dos, Claude usage and
-  session restore. Linear, Notion, deploy status and QA need an account or settings, so they wait in widget management;
+  session restore. Linear, Notion, Teams and QA need an account or settings, so they wait in widget management;
   a widget that isn't set up yet says what to fill in instead of showing an error.
 - **Toggleable widgets**
   - PR reviews, CI failures, review queue (GitHub CLI)
@@ -167,7 +167,7 @@ On macOS the shortcuts use **Cmd** instead of Ctrl (zoom Cmd +/−/0, terminal c
     Microsoft 365 connector and filters them by service tag (`[groupware]`, `[cruise]`, …), so each workspace shows
     only its own deploys. Paste the chat's "Copy link" address; add your GitHub login to mark your PRs. Cards are kept
     once read, so later refreshes only read new ones (about $0.1 the first time, about $0.01 after).
-  - Deploy/swap status, worktrees, QA runs, Claude usage limits & login, session restore
+  - Worktrees, QA runs, Claude usage limits & login, session restore
   - Today's to-dos: write, tick, finished items are cleared the next day
   - Your own widgets, as many as you like: **command output** (no shell), **links**, **folder documents** (newest first,
     opens with the default app)

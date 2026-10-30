@@ -47,23 +47,6 @@ interface WorktreesData {
   errors: string[];
 }
 
-interface DeployData {
-  rows: Array<{
-    name: string;
-    state: string;
-    waitingDays: number;
-    stale: boolean;
-    staging?: { number: number; title: string; url: string };
-    live?: { number: number; title: string; url: string };
-    note?: string;
-  }>;
-  pending: number;
-  unknown: number;
-  truncated?: boolean;
-  text?: string;
-  exitCode: number;
-}
-
 interface LinearData {
   issues: Array<{ id: string; title: string; state: string; group?: string; team: string; url: string; priority: string }> | null;
   fetchedAt: string;
@@ -125,30 +108,6 @@ export function renderWorktrees(d: WorktreesData): HTMLElement {
   }
   if (d.items.length > MAX_WORKTREES) box.append(h('p', 'muted small', `… 외 ${d.items.length - MAX_WORKTREES}개`));
   for (const e of d.errors) box.append(h('p', 'error small', e));
-  return box;
-}
-
-export function renderDeploy(d: DeployData, open: OpenURL): HTMLElement {
-  const box = h('div', 'w-list');
-  if (d.truncated) box.append(h('p', 'warn small', '출력이 너무 길어 앞부분만 보여 줍니다.'));
-  if (d.text !== undefined && d.text !== '' && !d.rows.length) {
-    box.append(h('pre', 'w-json', d.text));
-    if (d.exitCode) box.append(h('p', 'error small', `종료 코드 ${d.exitCode}`));
-    return box;
-  }
-  box.append(h('div', 'w-summary', `스왑 대기 ${d.pending}건${d.unknown ? ` · 확인 불가 ${d.unknown}` : ''}`));
-  for (const r of d.rows) {
-    const pending = r.state === 'pending';
-    const item = h('div', r.stale ? 'w-item attention' : 'w-item');
-    const title = h('div', 'w-pr-title');
-    title.append(h('strong', '', r.name), h('span', pending ? 'w-chip warn' : 'w-chip ok', pending ? `스왑 대기 ${r.waitingDays.toFixed(1)}일` : '반영됨'));
-    const meta = h('div', 'w-meta');
-    if (r.staging) meta.append(h('span', 'muted', 'staging'), link(`#${r.staging.number}`, r.staging.url, open));
-    if (r.live) meta.append(h('span', 'muted', 'live'), link(`#${r.live.number}`, r.live.url, open));
-    if (r.note) meta.append(h('span', 'muted small-inline', r.note));
-    item.append(title, meta);
-    box.append(item);
-  }
   return box;
 }
 
@@ -385,8 +344,6 @@ export function renderLocal(type: string, data: unknown, open: OpenURL, actions?
   switch (type) {
     case 'worktrees':
       return renderWorktrees(data as WorktreesData);
-    case 'deploy-swap':
-      return renderDeploy(data as DeployData, open);
     case 'linear-issues':
       return renderLinear(data as LinearData, open);
     case 'notion-specs':

@@ -22,7 +22,6 @@ const (
 	LinearInbox    = "linear-inbox"
 	NotionSpecs    = "notion-specs"
 	TeamsDeploy    = "teams-deploy"
-	DeploySwap     = "deploy-swap"
 	Worktrees      = "worktrees"
 	QA2Pass        = "qa-2pass"
 	ClaudeUsage    = "claude-usage"
@@ -32,6 +31,15 @@ const (
 	FolderFiles    = "folder-files"
 	Todo           = "todo"
 )
+
+// retired widget types were removed from the dashboard; saved workspaces
+// drop them when loaded instead of failing to load.
+var retired = map[string]bool{
+	"deploy-swap": true, // replaced by teams-deploy (v0.1.9)
+}
+
+// Retired reports whether a widget type was removed from the dashboard.
+func Retired(id string) bool { return retired[id] }
 
 // Definition describes a widget type the dashboard can render.
 type Definition struct {
@@ -121,16 +129,6 @@ var catalog = []Definition{
 			{Key: "tags", Label: "서비스 태그 (비우면 전체, 예: groupware-frontend, groupware)", Kind: KindStringList, Default: []string{}},
 			{Key: "me", Label: "내 GitHub 아이디 (내 PR 표시)", Kind: KindString, Default: ""},
 			{Key: "limit", Label: "보여 줄 카드 수", Kind: KindInt, Default: 8, Min: 1, Max: 30},
-		},
-	},
-	{
-		ID:          DeploySwap,
-		Name:        "배포·스왑 대기",
-		Description: "머지됐지만 운영에 반영(스왑)되지 않은 배포",
-		Source:      SourceLocal,
-		Settings: []SettingSpec{
-			{Key: "command", Label: "상태 조회 명령", Kind: KindString, Default: ""},
-			{Key: "staleDays", Label: "경고 기준(일)", Kind: KindInt, Default: 1, Min: 0, Max: 60},
 		},
 	},
 	{

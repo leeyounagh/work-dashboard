@@ -154,6 +154,22 @@ func TestStoreRejectsFileNameIDMismatch(t *testing.T) {
 	}
 }
 
+func TestStoreDropsRetiredWidgets(t *testing.T) {
+	store := NewStore(t.TempDir())
+	// Saved by an older version that still had the deploy-swap widget.
+	data := `{"id":"gw","name":"그룹웨어","widgets":[{"type":"deploy-swap","enabled":true},{"type":"todo","enabled":true}]}`
+	if err := os.WriteFile(filepath.Join(store.dir, "gw.json"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res := store.List()
+	if len(res.Problems) != 0 || len(res.Workspaces) != 1 {
+		t.Fatalf("res = %+v", res)
+	}
+	if w := res.Workspaces[0].Widgets; len(w) != 1 || w[0].Type != widget.Todo {
+		t.Fatalf("widgets = %+v", w)
+	}
+}
+
 func TestStoreRejectsInvalidOnSave(t *testing.T) {
 	store := NewStore(t.TempDir())
 	if err := store.Save(Workspace{ID: "x"}); err == nil {

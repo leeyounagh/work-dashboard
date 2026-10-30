@@ -173,7 +173,7 @@ func widgetTimeout(typ string) time.Duration {
 	switch typ {
 	case widget.LinearIssues, widget.LinearInbox, widget.NotionSpecs, widget.TeamsDeploy:
 		return 4 * time.Minute
-	case widget.DeploySwap, widget.Command:
+	case widget.Command:
 		return 2 * time.Minute
 	case widget.Worktrees:
 		return time.Minute
