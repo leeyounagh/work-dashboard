@@ -113,6 +113,24 @@ export function drawSweat(ctx: CanvasRenderingContext2D, x: number, y: number, t
   rect(ctx, '#ffffff', x + 1, y + dy + 1, 1, 2);
 }
 
+/** The MVP's crown: 11×8 pixels drawn at CROWN_PX CSS px each. */
+const CROWN_PX = 2;
+export const CROWN_W = 11 * CROWN_PX;
+export const CROWN_H = 8 * CROWN_PX;
+
+/** A gold crown with its top-left at (x, y); its jewel glints now and then. */
+export function drawCrown(ctx: CanvasRenderingContext2D, x: number, y: number, tick: number): void {
+  const px = (color: string, cx: number, cy: number, w: number, h: number) =>
+    rect(ctx, color, x + cx * CROWN_PX, y + cy * CROWN_PX, w * CROWN_PX, h * CROWN_PX);
+  px('#1e1f22', -1, 2, 13, 7); // outline, readable over a monitor
+  for (const p of [0, 5, 10]) px('#1e1f22', p - 1, -1, 3, 4);
+  px('#c9a227', 0, 3, 11, 5); // band
+  for (const p of [0, 5, 10]) px('#e5c07b', p, 0, 1, 3); // points
+  px('#e5c07b', 1, 2, 9, 1);
+  px('#e5c07b', 0, 3, 11, 1);
+  px(tick % 20 < 2 ? '#ffffff' : '#e06c75', 5, 5, 1, 2); // jewel
+}
+
 /** Confetti bursting from (x, headY) and a trophy badge under the feet (x, feetY). */
 export function drawCelebration(ctx: CanvasRenderingContext2D, x: number, headY: number, feetY: number, elapsed: number, label: string): void {
   for (const p of confetti(elapsed)) rect(ctx, p.color, x + p.x, headY + p.y, 3, 3);

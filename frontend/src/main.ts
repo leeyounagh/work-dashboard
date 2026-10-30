@@ -88,7 +88,7 @@ function startOffice(
   panel: TerminalPanel,
   tabs: TabHost,
   current: () => Workspace | null,
-): { stop: () => void; refresh: () => void } | undefined {
+): { stop: () => void; refresh: () => void; deployCards: (cards: unknown, me: unknown) => void } | undefined {
   let office: Office;
   try {
     office = new Office(
@@ -150,6 +150,7 @@ function startOffice(
   const offFeeds = connectOfficeFeeds(office);
   return {
     refresh,
+    deployCards: (cards, me) => office.deployCards(cards, me),
     stop: () => {
       off();
       offFeeds();
@@ -473,7 +474,12 @@ async function start() {
       setDone: async (id, done) => ((await SetTodoDone(workspaceId, id, done)) ?? []) as TodoItem[],
       remove: async (id) => ((await DeleteTodo(workspaceId, id)) ?? []) as TodoItem[],
     },
-  }));
+  }), (type, data) => {
+    // New deploy cards put up a banner in the office.
+    if (type !== 'teams-deploy' || !data || typeof data !== 'object') return;
+    const d = data as { cards?: unknown; me?: unknown };
+    office?.deployCards(d.cards, d.me);
+  });
   import.meta.hot?.dispose(() => board.destroy());
   // Ctrl + / Ctrl - / Ctrl 0: the remembered zoom, terminals follow with their font size.
   const onZoom = (z: number) => panel.setFontScale(z);
