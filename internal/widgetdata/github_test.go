@@ -193,3 +193,31 @@ func TestReviewersReviewGateVerdictReplacesEarlierOne(t *testing.T) {
 		t.Fatalf("a review-gate comment is a review: %+v", d.Items[0].Highlights)
 	}
 }
+
+// A reviewer who only answered in the conversation has reviewed; the
+// author's own replies do not count, and a later comment keeps an approval.
+func TestBuildPRReviewsPlainComments(t *testing.T) {
+	pr := github.PR{Author: "me", Requested: []string{"rev"}, Reviews: []github.Review{
+		{Author: "me", State: "COMMENTED", SubmittedAt: t0.Add(-4 * time.Hour), Comment: true},
+		{Author: "rev", State: "COMMENTED", SubmittedAt: t0.Add(-3 * time.Hour), Comment: true},
+	}}
+	d := BuildPRReviews([]github.PR{pr}, Settings{"highlightNoReview": true, "minApprovals": 1})
+	it := d.Items[0]
+	if len(it.Reviewers) != 1 || it.Reviewers[0].Login != "rev" || it.Reviewers[0].State != "COMMENTED" {
+		t.Fatalf("reviewers = %+v", it.Reviewers)
+	}
+	if slices.Contains(it.Highlights, "no-review") || d.Summary.NoReview != 0 {
+		t.Fatalf("a reviewer's comment is a review: %+v", it.Highlights)
+	}
+	// A comment leaves the request open; that is not a re-request.
+	if it.Reviewers[0].Rerequested {
+		t.Fatal("a commenter still requested was flagged re-requested")
+	}
+	approved := github.PR{Author: "me", Reviews: []github.Review{
+		{Author: "rev", State: "APPROVED", SubmittedAt: t0.Add(-2 * time.Hour)},
+		{Author: "rev", State: "COMMENTED", SubmittedAt: t0.Add(-1 * time.Hour), Comment: true},
+	}}
+	if got := Reviewers(approved); len(got) != 1 || got[0].State != "APPROVED" {
+		t.Fatalf("a comment after approving undid it: %+v", got)
+	}
+}
