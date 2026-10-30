@@ -83,6 +83,8 @@ export class WidgetBoard {
     private readonly saveWidgets: SaveWidgets,
     private readonly toast: (message: string) => void,
     private readonly actionsFor: (workspaceId: string, widgetId?: string) => WidgetActions,
+    /** Every widget's data as it loads (the office reacts to some of it). */
+    private readonly onData: (type: string, data: unknown) => void = () => {},
   ) {}
 
   setCatalog(catalog: Definition[]): void {
@@ -233,7 +235,15 @@ export class WidgetBoard {
         if (gen !== this.generation) return;
         if (res.error) body.replaceChildren(h('p', 'error small', res.error));
         else if (res.setup) body.replaceChildren(h('p', 'w-setup muted small', res.setup));
-        else body.replaceChildren(renderData(res.type, res.data, this.actionsFor(ws.id, inst.id)));
+        else {
+          body.replaceChildren(renderData(res.type, res.data, this.actionsFor(ws.id, inst.id)));
+          try {
+            this.onData(res.type, res.data);
+          } catch (err) {
+            // The office reacting is a bonus; the widget stays as rendered.
+            console.warn('widget data handler failed', err);
+          }
+        }
         when.textContent = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
         this.maybeAlert(res);
       } catch (err) {

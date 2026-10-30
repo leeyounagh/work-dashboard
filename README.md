@@ -59,9 +59,17 @@ Claude 화면에서 마우스로 드래그해 선택하면 바로 클립보드�
   - 7일 한도: 60% 부터 화분이 시들고, 85% 를 넘으면 갈색이 되어 잎이 떨어집니다.
   - 세션 토큰: 1만 토큰마다 책상에 서류가 쌓이고(최대 8장), 10만부터 커피잔이 늘고 땀을 흘립니다.
     10만 · 50만 · 100만에서 폭죽과 🏆 가 터지고, 왼쪽 벽 「오늘의 MVP」 액자에 가장 많이 쓴 터미널이 걸립니다.
+    MVP 캐릭터는 금색 이름표와 왕관을 늘 달고, MVP 가 바뀌면 왕관이 새 MVP 에게 날아갑니다.
   - 이번 주 누적: 50만이면 책장, 300만이면 소파, 1,000만이면 수족관이 생깁니다.
   - 토큰은 입력 + 캐시 쓰기 + 출력이고 캐시 읽기는 뺍니다(매 턴 대화 전체를 다시 읽는 양이라 너무 커서).
     이어서 연 세션은 대시보드가 연 뒤부터 셉니다.
+- **사무실 이벤트**
+  - 확인·입력을 1분 넘게 기다리는 캐릭터는 통통 뛰며 「!」 를 띄웁니다.
+  - 30분 · 1시간 · 2시간 쉬지 않고 일하면 이름 옆 🔥 가 커집니다 (응답 대기와 잠든 시간은 빼고).
+  - 답을 마친 세션에게 가장 가까이 쉬던 캐릭터가 달려와 👏 하이파이브합니다.
+  - Teams 배포 알림 위젯에 새 배포가 오면 벽에 현수막이 뜨고, 내 PR 이 있으면 모두 점프합니다.
+  - 하루 업적(오늘 백만 토큰 · 세션 3개 동시 작업 · 1시간 연속 · 하이파이브 5번 · 배포 3번 · 퀴즈 도전)을 달성하면
+    현수막과 함께 MVP 액자 아래에 배지가 쌓입니다 (다음 날 새로 시작).
 - **쉬는 시간 퀴즈** — 5시간 한도가 50% 미만일 때, 답을 마치고 2분 넘게 쉬는 Claude 세션이 가끔 머리 위 말풍선으로
   「퀴즈 풀래요?」 하고 묻습니다(한 번 물으면 20분 쉼). **예** 를 누르면 그 세션에서 구현한 내용(토큰을 쓴 세션) 또는
   알고리즘 4지선다 1문제를 내 달라는 요청이 터미널에 입력되고, Claude 가 문제를 내고 채점합니다(코드는 고치지 않음).
@@ -185,10 +193,17 @@ A mouse selection in Claude is copied straight to the clipboard; hold **Option**
   - 7-day limit: the plants wilt from 60% and turn brown, dropping leaves, from 85%.
   - Session tokens: paper piles up on the desk every 10K tokens (up to 8 sheets); from 100K coffee cups appear and the
     character sweats. 100K, 500K and 1M set off confetti and a 🏆, and the "오늘의 MVP" frame on the left wall shows
-    the terminal that used the most.
+    the terminal that used the most. The MVP wears a crown and a gold name tag; when the MVP changes, the crown flies over.
   - This week's total: a bookshelf at 500K, a sofa at 3M, an aquarium at 10M.
   - Tokens are input + cache writes + output; cache reads are left out (every turn re-reads the whole conversation,
     which would dwarf the rest). A resumed session counts from when the dashboard opened it.
+- **Office events**
+  - A character waiting on you for over a minute hops and shows a "!".
+  - 30 minutes, 1 hour and 2 hours of work without a break grow a 🔥 by the name (waits and sleep don't count).
+  - When a session finishes, the nearest idle character runs over for a 👏 high five.
+  - A new deploy in the Teams deploy widget puts a banner on the wall; everyone jumps when it includes your PR.
+  - Daily achievements (1M tokens today, 3 sessions at once, 1 hour streak, 5 high fives, 3 deploys, a quiz) show a
+    banner and leave a badge under the MVP frame (reset each day).
 - **Quiz breaks** — while the 5-hour limit is under 50%, a Claude session that finished and has been idle for over two
   minutes sometimes asks "퀴즈 풀래요?" in a speech bubble (at most once every 20 minutes). **예** types a request into
   its terminal for one multiple-choice question about what the session built (if it used tokens) or an algorithm

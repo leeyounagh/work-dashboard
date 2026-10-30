@@ -1,6 +1,6 @@
 import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
 import { drawBookshelf, drawDesk, drawRoom, drawRug } from './background';
-import { FONT, coffeeSpot, drawCelebration, drawCoffeeCounter, drawDeskClutter, drawEarnedFurniture, drawLamp, drawMvpFrame, drawNight, drawSunrise, drawSweat, wallSlots } from './decor';
+import { FONT, coffeeSpot, drawCelebration, drawCoffeeCounter, drawCrown, CROWN_H, CROWN_W, drawDeskClutter, drawEarnedFurniture, drawLamp, drawMvpFrame, drawNight, drawSunrise, drawSweat, wallSlots } from './decor';
 import {
   CELEBRATE_MS,
   SUNRISE_MS,
@@ -20,6 +20,11 @@ import {
 } from './vibe';
 import { QUIZ_CHANCE, QUIZ_CHECK_MS, QUIZ_GAP_MS, QUIZ_OFFER_MS, canOffer, lowUsage, pickQuizOffer, quizKind, quizQuestion, type QuizKind } from './quiz';
 import { QuizBubble } from './quizBubble';
+import { CROWN_FLIGHT_MS, HIGH_FIVE_MS, HIGH_FIVE_REACH, HIGH_FIVE_WALK_MS, MAX_SEEN, NO_STREAK, STREAK_BREAK_MS, advanceBanners, crownFlight } from './fun';
+import { dayKey, emptyDay, freshDeploys, hopOffset, newlyEarned, nextStreak, pickHighFive, streakLevel, toDeployCards, waitingLong } from './fun';
+import type { Banner, DayRecord, Streak } from './fun';
+import { loadDay, saveDay } from './dayStore';
+import { drawBadges, drawBanner, drawClap, drawExclaim, drawFlame } from './funDecor';
 import { ACTION_ROW, FRAME, WALK_FRAMES, bobHeight, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect, sheets, type Direction } from './sprites';
 
 /** A terminal as the office sees it. */
@@ -41,6 +46,7 @@ const COLORS = {
   screenWait: '#e5c07b',
   name: '#e3e5e8',
   label: '#9aa0a6',
+  mvp: '#e5c07b',
   bubble: '#e3e5e8',
   bubbleText: '#1e1f22',
   wait: '#e5c07b',
@@ -69,9 +75,14 @@ interface Character {
   celebrate: { at: number; label: string } | null; // a token milestone
   wantsCoffee: boolean; // queueing at the empty pot
   finished: boolean; // Claude finished a reply since the last prompt
+  streak: Streak; // working without a long break: a flame by the name
+  highFive: { partner: string; met: number | null; until: number } | null;
 }
 
 const short = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+/** Everyone hops this long when one of my PRs is deployed. */
+const CHEER_MS = 4000;
 
 const GUIDE_ID = 'office-guide';
 const GUIDE_BUBBLE = '읽을거리';
@@ -99,6 +110,18 @@ export class Office {
   private offer: { id: string; until: number } | null = null;
   private nextQuizCheck = performance.now() + QUIZ_CHECK_MS;
   private quietUntil = 0;
+  /** Banners across the wall (deploys, achievements), one at a time. */
+  private banners: Banner[] = [];
+  private cheerUntil = 0;
+  /** Today's achievements and the counts behind them. */
+  private day: DayRecord = loadDay();
+  private nextAchievementCheck = 0;
+  private dayDirty = false;
+  /** The last update, to notice the window was hidden or the computer slept. */
+  private lastUpdate = 0;
+  /** The MVP's terminal, and the crown on its way to a new MVP. */
+  private mvpId: string | null = null;
+  private crown: { from: { x: number; y: number }; to: string; at: number } | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -160,6 +183,8 @@ export class Office {
       celebrate: null,
       wantsCoffee: false,
       finished: false,
+      streak: NO_STREAK,
+      highFive: null,
     };
   }
 
@@ -222,6 +247,8 @@ export class Office {
         celebrate: null,
         wantsCoffee: false,
         finished: false,
+        streak: NO_STREAK,
+        highFive: null,
       });
     }
   }
@@ -234,9 +261,12 @@ export class Office {
   event(termId: string, ev: HookInput): void {
     const c = this.chars.get(termId);
     if (!c) return;
-    c.state = nextState(c.state, ev, performance.now());
-    if (ev.event === 'Stop') c.finished = true;
-    else if (ev.event === 'UserPromptSubmit' || ev.event === 'SessionStart') c.finished = false;
+    const now = performance.now();
+    c.state = nextState(c.state, ev, now);
+    if (ev.event === 'Stop') {
+      c.finished = true;
+      this.startHighFive(c, now);
+    } else if (ev.event === 'UserPromptSubmit' || ev.event === 'SessionStart') c.finished = false;
   }
 
   /** New usage limits; a reset of the 5-hour window brings the morning. */
@@ -251,11 +281,39 @@ export class Office {
     if (!c) return;
     const milestone = crossedMilestone(c.tokens, tokens);
     if (milestone !== null) c.celebrate = { at: performance.now(), label: formatTokens(milestone) };
+    // Today's tokens grow by what each session adds (session counts restart with the app).
+    if (tokens > c.tokens) {
+      const day = this.today();
+      this.day = { ...day, tokens: day.tokens + tokens - c.tokens };
+      this.dayDirty = true;
+    }
     c.tokens = tokens;
   }
 
   setWeekTokens(week: number): void {
     this.week = week;
+  }
+
+  /** New deploy cards from the Teams widget (untrusted data): a banner each, and a cheer when my PR went out. */
+  deployCards(raw: unknown, me: unknown): void {
+    const now = performance.now();
+    const day = this.today();
+    const cheers = freshDeploys(toDeployCards(raw), new Set(day.seen), typeof me === 'string' ? me : '', Date.now());
+    if (!cheers.length) return;
+    // Remembered for the day, so a restart does not cheer (or count) them again.
+    const seen = [...new Set([...day.seen, ...cheers.map((d) => d.id)])].slice(-MAX_SEEN);
+    this.day = { ...day, seen, deploys: day.deploys + cheers.length };
+    saveDay(this.day);
+    this.nextAchievementCheck = 0;
+    this.banners = [...this.banners, ...cheers.map((d) => ({ text: d.text, at: null }))];
+    if (cheers.some((d) => d.mine)) this.cheerUntil = now + CHEER_MS;
+  }
+
+  /** Today's record, started afresh after midnight. */
+  private today(): DayRecord {
+    const key = dayKey(new Date());
+    if (this.day.day !== key) this.day = emptyDay(key);
+    return this.day;
   }
 
   destroy(): void {
@@ -342,6 +400,12 @@ export class Office {
     const noCoffee = coffeeEmpty(this.usage.fiveHour);
     const pot = coffeeSpot(this.width, WALL_H);
     this.updatePose(this.guide, true, now);
+    // Waiting on you is a pause, not work; so is a hidden window or a sleeping computer.
+    const slept = this.lastUpdate > 0 && now - this.lastUpdate >= STREAK_BREAK_MS;
+    this.lastUpdate = now;
+    for (const c of this.chars.values()) {
+      c.streak = slept ? NO_STREAK : nextStreak(c.streak, c.term.alive && (c.state.mood === 'working' || c.state.mood === 'thinking'), now);
+    }
     for (const c of this.visible()) {
       const spot = deskSpot(c.desk, this.width);
       const busy = c.state.mood !== 'idle' && c.term.alive;
@@ -366,7 +430,7 @@ export class Office {
       const dx = c.tx - c.x;
       const dy = c.ty - c.y;
       const dist = Math.hypot(dx, dy);
-      const speed = busy ? 7 : 2.5;
+      const speed = busy || c.highFive ? 7 : 2.5;
       if (dist > speed) {
         c.x += (dx / dist) * speed;
         c.y += (dy / dist) * speed;
@@ -379,6 +443,95 @@ export class Office {
       }
     }
     this.updateQuiz(now);
+    this.updateHighFives(now);
+    this.updateAchievements(now);
+    this.banners = advanceBanners(this.banners, now);
+  }
+
+  /** A session that just finished gets a high five from the nearest idle character. */
+  private startHighFive(c: Character, now: number) {
+    if (!c.shown || !c.term.alive || c.highFive) return;
+    const free = (o: Character) => o.term.alive && o.state.mood === 'idle' && !o.highFive && o.term.id !== this.offer?.id;
+    const others = this.visible().map((o) => ({ id: o.term.id, x: o.x, y: o.y, idle: free(o) }));
+    const pick = pickHighFive({ id: c.term.id, x: c.x, y: c.y, idle: true }, others);
+    const p = pick && this.chars.get(pick.id);
+    if (!p) return;
+    const until = now + HIGH_FIVE_WALK_MS;
+    c.highFive = { partner: p.term.id, met: null, until };
+    p.highFive = { partner: c.term.id, met: null, until };
+    // The finisher waits; the partner comes over.
+    c.tx = c.x;
+    c.ty = c.y;
+    c.nextWander = until;
+    p.nextWander = until;
+    this.aimHighFive(p, c);
+  }
+
+  /** The partner heads for the finisher's side, inside the room. */
+  private aimHighFive(p: Character, c: Character) {
+    p.tx = Math.min(this.width - 20, Math.max(20, c.x + (p.x < c.x ? -30 : 30)));
+    p.ty = c.y;
+  }
+
+  private updateHighFives(now: number) {
+    for (const c of this.visible()) {
+      const hf = c.highFive;
+      if (!hf) continue;
+      const p = this.chars.get(hf.partner);
+      const end = () => {
+        c.highFive = null;
+        c.nextWander = now;
+        if (p) {
+          p.highFive = null;
+          p.nextWander = now;
+        }
+      };
+      // Either one getting back to work (or closing) calls it off.
+      const free = (o: Character) => o.term.alive && o.state.mood === 'idle';
+      if (!p?.highFive || !p.shown || !free(c) || !free(p)) end();
+      else if (hf.met === null && now > hf.until) end();
+      else if (hf.met === null && Math.hypot(p.x - c.x, p.y - c.y) <= HIGH_FIVE_REACH) {
+        c.highFive = { ...hf, met: now };
+        p.highFive = { ...p.highFive, met: now };
+      } else if (hf.met === null) {
+        // Still walking over: the partner follows the finisher if it moved.
+        if (p.nextWander === hf.until) this.aimHighFive(p, c);
+      } else if (hf.met !== null && now - hf.met >= HIGH_FIVE_MS) {
+        end();
+        this.countDay('highFives');
+      }
+    }
+  }
+
+  private countDay(key: 'highFives' | 'quizzes') {
+    const day = this.today();
+    this.day = { ...day, [key]: day[key] + 1 };
+    saveDay(this.day);
+    this.nextAchievementCheck = 0;
+  }
+
+  /** Every couple of seconds: a banner for each achievement newly earned today. */
+  private updateAchievements(now: number) {
+    if (now < this.nextAchievementCheck) return;
+    this.nextAchievementCheck = now + 2000;
+    const day = this.today();
+    if (this.dayDirty) {
+      saveDay(day);
+      this.dayDirty = false;
+    }
+    const all = [...this.chars.values()];
+    const got = newlyEarned(day.earned, {
+      totalTokens: day.tokens,
+      working: all.filter((c) => c.term.alive && (c.state.mood === 'working' || c.state.mood === 'thinking')).length,
+      streak: Math.max(0, ...all.map((c) => streakLevel(c.streak, now))),
+      highFives: this.day.highFives,
+      deploys: this.day.deploys,
+      quizzes: this.day.quizzes,
+    });
+    if (!got.length) return;
+    this.day = { ...this.day, earned: [...this.day.earned, ...got.map((a) => a.id)] };
+    saveDay(this.day);
+    this.banners = [...this.banners, ...got.map((a) => ({ text: `${a.icon} 업적 달성: ${a.name}`, at: null }))];
   }
 
   /**
@@ -409,7 +562,10 @@ export class Office {
     this.quizBubble.show(quizQuestion(kind), c.x, this.headTop(c) - 6, (yes) => {
       this.offer = null;
       c.nextWander = performance.now();
-      if (yes) this.onQuiz(id, kind);
+      if (yes) {
+        this.countDay('quizzes');
+        this.onQuiz(id, kind);
+      }
     });
   }
 
@@ -441,7 +597,10 @@ export class Office {
     const { ctx, width: w, height: h } = this;
     drawRoom(ctx, w, h, WALL_H, plantHealth(this.usage.sevenDay));
     const shown = this.visible();
-    this.drawWallDecor(shown);
+    // The full tab title: several default terminals are all just "Claude" by name.
+    const best = mvp(shown.map((c) => ({ c, title: c.term.title, tokens: c.tokens })));
+    this.trackMvp(best?.c ?? null, now);
+    this.drawWallDecor(best);
     if (shown.length) drawRug(ctx, w, this.deskAreaBottom(), h);
     // Earned furniture, only where the floor below the desks has room (clear of the guide).
     if (h - this.deskAreaBottom() >= 80 && w >= 360) drawEarnedFurniture(ctx, officeLevel(this.week), h - 6, (x, bottom) => drawBookshelf(ctx, x, bottom), this.tick);
@@ -454,17 +613,64 @@ export class Office {
     drawNight(ctx, w, h, light.dark);
     if (light.lamps) for (const c of shown) this.drawDeskLamp(c);
     // Back to front so lower characters overlap higher ones.
-    for (const c of [...shown, this.guide].sort((a, b) => a.y - b.y)) this.drawCharacter(c, now);
+    for (const c of [...shown, this.guide].sort((a, b) => a.y - b.y)) this.drawCharacter(c, now, c === best?.c);
+    this.drawHighFives(shown, now);
+    this.drawCrownFlight(now);
     drawSunrise(ctx, w, h, (now - this.sunriseAt) / SUNRISE_MS);
+    const banner = this.banners[0];
+    if (banner?.at != null) drawBanner(ctx, w, banner.text, now - banner.at);
+  }
+
+  /** A new MVP: the crown flies over from the old one (when both are in the room). */
+  private trackMvp(best: Character | null, now: number) {
+    const id = best?.term.id ?? null;
+    if (id === this.mvpId) return;
+    const old = this.mvpId ? this.chars.get(this.mvpId) : undefined;
+    // Changed again mid-flight: it takes off from where it is now.
+    const from = this.crownAt(now) ?? (old?.shown ? this.crownSpot(old) : null);
+    this.crown = from && id ? { from, to: id, at: now } : null;
+    this.mvpId = id;
+  }
+
+  /** Where the crown sits on a character: left of its name. */
+  private crownSpot(c: Character): { x: number; y: number } {
+    this.ctx.font = `bold 11px ${FONT}`;
+    const half = this.ctx.measureText(short(nameLabel(c.term.title), 16)).width / 2;
+    const top = Math.round(c.y - this.sizeOf(c));
+    return { x: Math.round(c.x - half - CROWN_W - 6), y: top - 4 - CROWN_H + 2 };
+  }
+
+  /** The flying crown's position, or null when nothing is in flight. */
+  private crownAt(now: number): { x: number; y: number } | null {
+    const to = this.crown && this.chars.get(this.crown.to);
+    if (!this.crown || !to?.shown) return null;
+    return crownFlight(this.crown.from, this.crownSpot(to), (now - this.crown.at) / CROWN_FLIGHT_MS);
+  }
+
+  private drawCrownFlight(now: number) {
+    const p = this.crownAt(now);
+    // Drawn on the landing frame too: the name tag skipped it this frame.
+    if (p) drawCrown(this.ctx, Math.round(p.x), Math.round(p.y), this.tick);
+    if (!p || now - (this.crown?.at ?? 0) >= CROWN_FLIGHT_MS) this.crown = null;
+  }
+
+  /** Clapping hands over each pair that met for a high five. */
+  private drawHighFives(shown: Character[], now: number) {
+    for (const c of shown) {
+      const p = c.highFive?.met != null ? this.chars.get(c.highFive.partner) : undefined;
+      if (!p || c.term.id > p.term.id) continue; // once per pair
+      const top = Math.min(c.y - this.sizeOf(c), p.y - this.sizeOf(p));
+      drawClap(this.ctx, Math.round((c.x + p.x) / 2), Math.round(top - 30), now - (c.highFive?.met ?? now));
+    }
   }
 
   /** The MVP frame and the coffee counter in the wall's slots. */
-  private drawWallDecor(shown: Character[]) {
+  private drawWallDecor(best: { title: string; tokens: number } | null) {
     const slots = wallSlots(this.width);
     if (slots.frameX !== null) {
-      // The full tab title: several default terminals are all just "Claude" by name.
-      const best = mvp(shown.map((c) => ({ title: c.term.title, tokens: c.tokens })));
       drawMvpFrame(this.ctx, slots.frameX, 8, best?.title ?? null, best ? formatTokens(best.tokens) : '');
+      // Today's achievements under the frame.
+      drawBadges(this.ctx, slots.frameX, 60, this.day.earned);
     }
     if (slots.counterX !== null) drawCoffeeCounter(this.ctx, slots.counterX, WALL_H - 2, coffeeLevel(this.usage.fiveHour), this.tick);
   }
@@ -519,7 +725,7 @@ export class Office {
     ctx.imageSmoothingEnabled = false;
   }
 
-  private drawCharacter(c: Character, now: number) {
+  private drawCharacter(c: Character, now: number, isMvp: boolean) {
     const { ctx } = this;
     const moving = Math.hypot(c.tx - c.x, c.ty - c.y) > 1;
     const atDesk = !moving && c.state.mood !== 'idle';
@@ -527,8 +733,12 @@ export class Office {
     const lift = bobHeight(c.dog || !c.sheet.naturalWidth ? FRAME : frameSize(c.sheet.naturalWidth));
     const bob = !moving && !atDesk && c.pose === null ? Math.round(Math.sin(now / 400 + c.phase) * lift) : 0;
     const size = this.sizeOf(c);
+    // Waiting on you too long, or cheering a deploy of yours: hop.
+    const waitLong = waitingLong(c.state, c.term.alive, now);
+    const cheer = now < this.cheerUntil && c !== this.guide && c.term.alive;
+    const hop = waitLong || cheer ? hopOffset(now + c.phase * 200) : 0;
     const x = Math.round(c.x - size / 2);
-    const y = Math.round(c.y - size + bob);
+    const y = Math.round(c.y - size + bob - hop);
     ctx.globalAlpha = c.term.alive ? 1 : 0.4;
     if (!moving && !atDesk) {
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -538,10 +748,9 @@ export class Office {
     ctx.globalAlpha = 1;
 
     // Terminal name above the head, workspace name below the feet.
+    this.drawNameTag(c, y, isMvp, now);
+    if (waitLong) drawExclaim(ctx, x + size - 2, y + 2, this.tick);
     ctx.textAlign = 'center';
-    ctx.font = `bold 11px ${FONT}`;
-    ctx.fillStyle = COLORS.name;
-    ctx.fillText(short(nameLabel(c.term.title), 16), c.x, y - 4);
     ctx.font = `10px ${FONT}`;
     ctx.fillStyle = COLORS.label;
     ctx.fillText(short(c.term.workspace, 16), c.x, c.y + 13);
@@ -560,6 +769,26 @@ export class Office {
       if (elapsed > CELEBRATE_MS) c.celebrate = null;
       else drawCelebration(ctx, c.x, y + size / 3, c.y, elapsed, c.celebrate.label);
     }
+  }
+
+  /** The name over the head: the MVP's on a dark tag with a crown, a flame for a long work streak. */
+  private drawNameTag(c: Character, y: number, isMvp: boolean, now: number) {
+    const { ctx } = this;
+    ctx.textAlign = 'center';
+    ctx.font = `bold 11px ${FONT}`;
+    const name = short(nameLabel(c.term.title), 16);
+    const half = ctx.measureText(name).width / 2;
+    if (isMvp) {
+      const left = Math.round(c.x - half - CROWN_W - 6);
+      ctx.fillStyle = 'rgba(20,21,24,0.8)';
+      ctx.fillRect(left - 3, y - 4 - CROWN_H, Math.round(c.x + half + 4 - left + 3), CROWN_H + 4);
+      // While it flies over from the old MVP, the crown is drawn in flight.
+      if (this.crown?.to !== c.term.id) drawCrown(ctx, left, y - 4 - CROWN_H + 2, this.tick);
+    }
+    ctx.fillStyle = isMvp ? COLORS.mvp : COLORS.name;
+    ctx.fillText(name, c.x, y - 4);
+    const level = c === this.guide ? 0 : streakLevel(c.streak, now);
+    if (level) drawFlame(ctx, Math.round(c.x + half + 4), y - 4, level, this.tick);
   }
 
   /** A small bar (to-do fraction) and a label (2/5 step, or tools · time) above the name. */
