@@ -28,6 +28,7 @@ interface Session extends TerminalInfo {
   fit: FitAddon;
   pane: HTMLElement;
   typedAt: number; // performance.now() of the last keystroke, 0 if none
+  claudeSession?: string; // Claude session ID; keeps the tab's place across restarts
 }
 
 interface WailsRuntime {
@@ -225,7 +226,7 @@ export class TerminalPanel {
   private start(
     kind: TerminalKind,
     workspaceId: string,
-    launch: (cols: number, rows: number) => Promise<{ id: string; title: string; dir: string }>,
+    launch: (cols: number, rows: number) => Promise<{ id: string; title: string; dir: string; session?: string }>,
   ): Promise<void> {
     const run = this.queue.then(() => this.launch(kind, workspaceId, launch));
     this.queue = run.catch(() => undefined);
@@ -235,7 +236,7 @@ export class TerminalPanel {
   private async launch(
     kind: TerminalKind,
     workspaceId: string,
-    launch: (cols: number, rows: number) => Promise<{ id: string; title: string; dir: string }>,
+    launch: (cols: number, rows: number) => Promise<{ id: string; title: string; dir: string; session?: string }>,
   ): Promise<void> {
     const pane = document.createElement('div');
     pane.className = 'term-pane';
@@ -267,7 +268,7 @@ export class TerminalPanel {
       fit.fit();
 
       const info = await launch(term.cols, term.rows);
-      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane, typedAt: 0 };
+      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane, typedAt: 0, claudeSession: info.session };
       dir = info.dir;
     } catch (err) {
       term?.dispose();
@@ -290,6 +291,7 @@ export class TerminalPanel {
     this.wireClipboard(session);
     this.tabs.add({
       id: session.id,
+      sortKey: session.claudeSession,
       title: session.title,
       tooltip: dir,
       kind: session.kind,

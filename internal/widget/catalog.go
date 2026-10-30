@@ -120,13 +120,13 @@ var catalog = []Definition{
 	},
 	{
 		ID:          TeamsDeploy,
-		Name:        "Teams 배포 알림",
-		Description: "Claude에 연결된 Microsoft 365 커넥터로 Teams 배포 알림방을 읽어, 고른 서비스의 배포 카드만 보여 줍니다",
+		Name:        "배포 알림 (Teams 채팅)",
+		Description: "CI 가 배포 결과를 올리는 Teams 채팅방을 Claude의 Microsoft 365 커넥터로 읽어, 「✅ [서비스] 환경」 제목의 카드를 서비스별로 걸러 보여 줍니다",
 		Source:      SourceClaude,
 		Multiple:    true,
 		Settings: []SettingSpec{
 			{Key: "chat", Label: "채팅방 링크", Kind: KindString, Default: "", Description: "Teams 에서 채팅방 「링크 복사」로 얻은 주소"},
-			{Key: "tags", Label: "서비스 태그 (비우면 전체, 예: groupware-frontend, groupware)", Kind: KindStringList, Default: []string{}},
+			{Key: "tags", Label: "서비스 태그 (비우면 전체, 예: api, web)", Kind: KindStringList, Default: []string{}},
 			{Key: "me", Label: "내 GitHub 아이디 (내 PR 표시)", Kind: KindString, Default: ""},
 			{Key: "limit", Label: "보여 줄 카드 수", Kind: KindInt, Default: 8, Min: 1, Max: 30},
 		},

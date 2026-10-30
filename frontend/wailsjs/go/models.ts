@@ -449,6 +449,7 @@ export namespace term {
 	    title: string;
 	    dir: string;
 	    kind: string;
+	    session?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
@@ -460,6 +461,7 @@ export namespace term {
 	        this.title = source["title"];
 	        this.dir = source["dir"];
 	        this.kind = source["kind"];
+	        this.session = source["session"];
 	    }
 	}
 

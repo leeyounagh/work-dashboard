@@ -1,9 +1,17 @@
+import type { Where } from '../lib/sortable';
+import { mergeOrder, type TabOrderStore } from './tabOrder';
+
+/** A private drag type, so dropping a tab into a terminal or text field inserts nothing. */
+const DRAG_TYPE = 'application/x-work-dashboard-tab';
+
 /**
  * One tab strip + body shared by terminals and file viewers. Tabs belong to a
  * group (the workspace that opened them); only the current group's tabs show.
  */
 export interface TabOptions {
   id: string;
+  /** A key that survives restarts; a reordered tab with one opens in its old place. */
+  sortKey?: string;
   title: string;
   tooltip?: string;
   kind: string; // css hook: kind-claude, kind-shell, kind-file
@@ -26,12 +34,14 @@ export class TabHost {
   private recent: string[] = []; // most recently used first
   private active: string | null = null;
   private group: string | null = null;
+  private dragging: string | null = null;
 
   constructor(
     private readonly strip: HTMLElement,
     private readonly body: HTMLElement,
     /** Called with the active tab id (null when none is shown) after every change. */
     private readonly onChange: (activeId: string | null) => void = () => {},
+    private readonly orderStore?: TabOrderStore,
   ) {}
 
   has(id: string): boolean {
@@ -101,9 +111,10 @@ export class TabHost {
     close.addEventListener('click', () => opts.onClose());
 
     el.append(label, close);
+    this.makeDraggable(el, opts.id);
     opts.pane.classList.add('tab-pane');
     opts.pane.classList.remove('active');
-    this.strip.append(el);
+    this.placeNew(el, opts.sortKey);
     this.body.append(opts.pane);
     const tab = { opts, el, label };
     this.tabs.set(opts.id, tab);
@@ -111,6 +122,85 @@ export class TabHost {
     if (!this.visible(tab)) return; // opened for another workspace: stays in the background
     if (activate || this.active === null) this.activate(opts.id);
     else this.onChange(this.active);
+  }
+
+  /** Moves a tab before or after another in the strip; unknown or identical ids do nothing. */
+  move(from: string, to: string, where: Where): void {
+    const a = this.tabs.get(from);
+    const b = this.tabs.get(to);
+    if (!a || !b || a === b) return;
+    b.el.insertAdjacentElement(where === 'before' ? 'beforebegin' : 'afterend', a.el);
+    this.saveOrder();
+  }
+
+  /** A new tab goes at the end, or before the first open tab it was before last time. */
+  private placeNew(el: HTMLElement, key: string | undefined) {
+    const saved = key && this.orderStore ? this.orderStore.load() : [];
+    const rank = key ? saved.indexOf(key) : -1;
+    const keys = this.keysByEl();
+    const next =
+      rank < 0
+        ? undefined
+        : [...this.strip.children].find((c) => {
+            const k = keys.get(c);
+            return k !== undefined && saved.indexOf(k) > rank;
+          });
+    if (next) this.strip.insertBefore(el, next);
+    else this.strip.append(el);
+  }
+
+  private keysByEl(): Map<Element, string | undefined> {
+    return new Map([...this.tabs.values()].map((t) => [t.el, t.opts.sortKey]));
+  }
+
+  private saveOrder() {
+    if (!this.orderStore) return;
+    const keys = this.keysByEl();
+    const current = [...this.strip.children].flatMap((el) => keys.get(el) ?? []);
+    this.orderStore.save(mergeOrder(current, this.orderStore.load()));
+  }
+
+  /** Drag a tab sideways onto another to reorder the strip. */
+  private makeDraggable(el: HTMLElement, id: string) {
+    el.draggable = true;
+    const clear = () => el.classList.remove('drop-before', 'drop-after');
+    el.addEventListener('dragstart', (e) => {
+      // Renaming: let the mouse select text in the input instead.
+      if (el.querySelector('input')) {
+        e.preventDefault();
+        return;
+      }
+      this.dragging = id;
+      el.classList.add('dragging');
+      e.dataTransfer?.setData(DRAG_TYPE, id);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    });
+    el.addEventListener('dragend', () => {
+      this.dragging = null;
+      for (const t of this.tabs.values()) t.el.classList.remove('dragging', 'drop-before', 'drop-after');
+    });
+    // Only a tab of this strip being dragged; other drags (text, files) pass through.
+    const from = () => (this.dragging !== null && this.dragging !== id && this.tabs.has(this.dragging) ? this.dragging : null);
+    const side = (e: DragEvent): Where => {
+      const r = el.getBoundingClientRect();
+      return e.clientX < r.left + r.width / 2 ? 'before' : 'after';
+    };
+    el.addEventListener('dragover', (e) => {
+      if (!from()) return;
+      e.preventDefault();
+      const before = side(e) === 'before';
+      el.classList.toggle('drop-before', before);
+      el.classList.toggle('drop-after', !before);
+    });
+    el.addEventListener('dragleave', clear);
+    el.addEventListener('drop', (e) => {
+      const f = from();
+      clear();
+      if (!f) return;
+      e.preventDefault();
+      // From the pointer, not the marks: dragleave clears them between the tab's children.
+      this.move(f, id, side(e));
+    });
   }
 
   /** Inline rename: Enter saves, Escape or blur without change cancels. */
@@ -169,6 +259,7 @@ export class TabHost {
     t.el.remove();
     t.opts.pane.remove();
     this.tabs.delete(id);
+    if (this.dragging === id) this.dragging = null;
     this.recent = this.recent.filter((r) => r !== id);
     if (this.active !== id) {
       this.onChange(this.active);

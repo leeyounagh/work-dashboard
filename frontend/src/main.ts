@@ -56,6 +56,7 @@ import { useCustomSheets } from './office/sprites';
 import { mountSplitters } from './layout/splitters';
 import { blockStrayFileDrops } from './terminal/fileDrop';
 import { TabHost } from './tabs/tabHost';
+import { localTabOrder } from './tabs/tabOrder';
 import { TerminalPanel, type TerminalKind } from './terminal/panel';
 import { renderSidebar, type SidebarHandlers, type SidebarState } from './workspaces/sidebar';
 
@@ -413,7 +414,7 @@ async function start() {
   let selection: Selection = { workspace: null, dirty: false };
   const editorBody = byId('editor-body');
   const emptyNote = byId('editor-empty');
-  const tabs = new TabHost(byId('editor-tabs'), editorBody, (active) => emptyNote.classList.toggle('hidden', active !== null));
+  const tabs = new TabHost(byId('editor-tabs'), editorBody, (active) => emptyNote.classList.toggle('hidden', active !== null), localTabOrder);
   const panel = new TerminalPanel(tabs, editorBody, toast);
   const office = startOffice(panel, tabs, () => selection.workspace);
   import.meta.hot?.dispose(() => office?.stop());
