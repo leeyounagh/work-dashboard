@@ -205,6 +205,7 @@ func (a *App) onHook(key string, ev bridge.HookEvent) {
 		_ = a.deps.Sessions.Touch(key, ev.Prompt, a.now())
 	}
 	if ev.Event == "PostToolUse" && ev.FilePath() != "" {
+		a.seen.add(ev.FilePath())
 		a.deps.Emit(a.ctx, eventFilesSeen, FilesEvent{
 			TermID: s.termID, WorkspaceID: s.workspaceID, Paths: []string{ev.FilePath()}, Tool: ev.ToolName,
 		})

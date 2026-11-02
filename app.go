@@ -99,6 +99,7 @@ type App struct {
 	// can be offered for restore next time.
 	shuttingDown atomic.Bool
 	restoreMu    sync.Mutex
+	seen         seenFiles  // files Claude touched; the viewer may open them
 	todoMu       sync.Mutex // one to-do list edit at a time
 	// life is cancelled on shutdown so widget loads (gh, git, headless claude)
 	// stop with the app.
