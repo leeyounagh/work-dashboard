@@ -26,6 +26,10 @@ export function FileDiff(arg1) {
   return window['go']['main']['App']['FileDiff'](arg1);
 }
 
+export function FindDefinition(arg1, arg2, arg3) {
+  return window['go']['main']['App']['FindDefinition'](arg1, arg2, arg3);
+}
+
 export function GuideArticle(arg1) {
   return window['go']['main']['App']['GuideArticle'](arg1);
 }

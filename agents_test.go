@@ -330,3 +330,50 @@ func TestViewerOpensFilesClaudeTouched(t *testing.T) {
 		t.Fatalf("deleted file: %v", err)
 	}
 }
+
+func TestFindDefinition(t *testing.T) {
+	h := newHarness(t)
+	ws, _ := openTestClaude(t, h)
+	root := ws.Folders[0]
+	write := func(name, body string) string {
+		p := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	page := write("app/page.tsx", "import { Title } from './ui';\n\nconst local = 1;\n")
+	write("app/ui/index.ts", "export { Title } from './Title';\n")
+	title := write("app/ui/Title.tsx", "\nexport function Title() {}\n")
+	same := func(a, b string) bool {
+		x, err1 := os.Stat(a)
+		y, err2 := os.Stat(b)
+		return err1 == nil && err2 == nil && os.SameFile(x, y)
+	}
+
+	if loc, err := h.app.FindDefinition(page, "./ui", "Title"); err != nil || !same(loc.Path, title) || loc.Line != 2 {
+		t.Fatalf("imported = %+v, %v", loc, err)
+	}
+	if loc, err := h.app.FindDefinition(page, "", "local"); err != nil || !same(loc.Path, page) || loc.Line != 3 {
+		t.Fatalf("local = %+v, %v", loc, err)
+	}
+	if loc, err := h.app.FindDefinition(page, "./ui", "Missing"); err != nil || loc.Line != 1 || filepath.Base(loc.Path) != "index.ts" {
+		t.Fatalf("unknown name shows the file: %+v, %v", loc, err)
+	}
+	if _, err := h.app.FindDefinition(page, "./nope", ""); err == nil || !strings.Contains(err.Error(), "찾지 못했습니다") {
+		t.Fatalf("missing import: %v", err)
+	}
+	outside := filepath.Join(t.TempDir(), "x.ts")
+	if err := os.WriteFile(outside, []byte("export const x = 1;\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.app.FindDefinition(outside, "", "x"); err == nil {
+		t.Fatal("a file outside the workspaces must not be searched")
+	}
+	if _, err := h.app.FindDefinition(page, "../../"+filepath.Base(filepath.Dir(outside))+"/x", "x"); err == nil {
+		t.Fatal("an import leading outside the workspaces must not resolve")
+	}
+}

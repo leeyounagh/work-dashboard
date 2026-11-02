@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leeyounagh/work-dashboard/internal/files"
+	"github.com/leeyounagh/work-dashboard/internal/jsresolve"
 )
 
 // maxViewBytes caps what the viewer loads for one file.
@@ -68,6 +69,47 @@ func (a *App) ReadFile(path string) (files.Content, error) {
 		return files.Content{}, viewError(path, err)
 	}
 	return c, nil
+}
+
+// FindDefinition answers a Ctrl+click in the viewer: where name (imported
+// from spec) is declared. An empty spec means name is declared in from
+// itself; an empty name means the imported file. It only reads files the
+// viewer may open.
+func (a *App) FindDefinition(from, spec, name string) (jsresolve.Location, error) {
+	if err := a.unlocked(); err != nil {
+		return jsresolve.Location{}, err
+	}
+	g := a.viewerGuard()
+	if _, err := g.Resolve(from); err != nil {
+		return jsresolve.Location{}, viewError(from, err)
+	}
+	r := jsresolve.Resolver{Allow: func(p string) bool {
+		_, err := g.Resolve(p)
+		return err == nil
+	}}
+	file := from
+	if spec != "" {
+		target, err := r.Import(from, spec)
+		if err != nil {
+			return jsresolve.Location{}, fmt.Errorf("「%s」 파일을 찾지 못했습니다", spec)
+		}
+		file = target
+	}
+	loc, err := r.Definition(file, name)
+	if err != nil {
+		if spec == "" {
+			return jsresolve.Location{}, fmt.Errorf("「%s」 정의를 찾지 못했습니다", name)
+		}
+		loc = jsresolve.Location{Path: file, Line: 1} // the file was found; show it from the top
+	}
+	// Another file: its real path (pnpm links followed), so one file opens
+	// in one tab. The same file keeps the path its tab was opened with.
+	if loc.Path != from {
+		if real, err := g.Resolve(loc.Path); err == nil {
+			loc.Path = real
+		}
+	}
+	return loc, nil
 }
 
 // FileDiff returns uncommitted changes of a file.

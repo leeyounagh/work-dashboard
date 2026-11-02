@@ -202,6 +202,7 @@ textarea.field { resize: vertical; }
 .file-bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
 .file-path { flex: 1; color: var(--text-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 .file-editor { flex: 1; min-height: 0; overflow: hidden; }
+body.ctrl-held .file-editor.navigable .cm-content { cursor: pointer; }
 .term-tab.kind-file::before { content: '◆'; color: var(--warn); font-size: 9px; }
 
 /* Toast */
