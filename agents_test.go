@@ -294,3 +294,39 @@ func TestHooksCountTranscriptTokens(t *testing.T) {
 		t.Fatalf("a foreign transcript produced %d token events", n)
 	}
 }
+
+// Files Claude read outside the workspaces (listed under 「최근 본 파일」)
+// open in the viewer; other outside files, and folders around them, do not.
+func TestViewerOpensFilesClaudeTouched(t *testing.T) {
+	h := newHarness(t)
+	openTestClaude(t, h)
+	outside := t.TempDir()
+	notes := filepath.Join(outside, "notes.md")
+	other := filepath.Join(outside, "other.md")
+	for _, p := range []string{notes, other} {
+		if err := os.WriteFile(p, []byte("# hi\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := h.app.ReadFile(notes); err == nil || !strings.Contains(err.Error(), "워크스페이스 폴더 밖") {
+		t.Fatalf("before Claude read it: %v", err)
+	}
+
+	h.app.onHook("sess-1", bridge.HookEvent{Event: "PostToolUse", ToolName: "Read", ToolInput: map[string]any{"file_path": notes}})
+	if c, err := h.app.ReadFile(notes); err != nil || c.Text != "# hi\n" {
+		t.Fatalf("ReadFile = %+v, %v", c, err)
+	}
+	if _, err := h.app.ReadFile(other); err == nil {
+		t.Fatal("a file Claude did not touch must stay closed")
+	}
+	if _, err := h.app.ListDir(outside); err == nil {
+		t.Fatal("the folder around a touched file must stay closed")
+	}
+
+	if err := os.Remove(notes); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.app.ReadFile(notes); err == nil || !strings.Contains(err.Error(), "파일이 없습니다") {
+		t.Fatalf("deleted file: %v", err)
+	}
+}
