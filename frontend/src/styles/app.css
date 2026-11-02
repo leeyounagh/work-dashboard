@@ -363,3 +363,37 @@ body.resizing-col .tab-pane, body.resizing-row .tab-pane, body.resizing-col canv
 }
 .quiz-buttons { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
 .quiz-buttons button { padding: 2px 10px; font-size: 12px; }
+
+/* Decorating the office: the 꾸미기 button and, while decorating, the toolbar */
+.room-toggle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  padding: 1px 8px;
+  font-size: 11px;
+  opacity: 0.55;
+}
+.room-toggle:hover, .room-toggle:focus-visible { opacity: 1; }
+.room-toggle[hidden] { display: none; }
+.room-bar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 12px);
+  padding: 4px 6px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+}
+.room-bar[hidden] { display: none; }
+.room-bar select { width: auto; padding: 1px 4px; font-size: 12px; }
+.room-bar button { padding: 1px 8px; font-size: 12px; }
+.room-hint { color: var(--text-muted); }

@@ -75,6 +75,9 @@ Claude 화면에서 마우스로 드래그해 선택하면 바로 클립보드�
   「퀴즈 풀래요?」 하고 묻습니다(한 번 물으면 20분 쉼). **예** 를 누르면 그 세션에서 구현한 내용(토큰을 쓴 세션) 또는
   알고리즘 4지선다 1문제를 내 달라는 요청이 터미널에 입력되고, Claude 가 문제를 내고 채점합니다(코드는 고치지 않음).
   터미널에 써 둔 글이 있거나 아직 답한 적 없는 새 탭에는 묻지 않습니다.
+- **사무실 꾸미기** — 사무실 오른쪽 위 **🎨 꾸미기** 를 누르면 바닥·벽 테마(어두운 나무 · 밝은 나무 · 체크 타일 · 남색 카펫 · 숲속)를
+  고르고, 화분 · 러그 · 얻은 가구(책장 · 소파 · 수족관)를 끌어서 옮길 수 있습니다. 「배치 초기화」 는 위치만 원래대로 돌리고,
+  Esc 나 「완료」 로 끝냅니다. 고른 것은 이 컴퓨터에 저장되고, 패널 크기를 바꿔도 비율대로 따라갑니다.
 - **화면 확대** — Ctrl + / Ctrl − / Ctrl 0 (배율은 기억됩니다), 패널 폭은 드래그로 조절합니다.
 
 ### 구동 원리
@@ -210,6 +213,9 @@ A mouse selection in Claude is copied straight to the clipboard; hold **Option**
   its terminal for one multiple-choice question about what the session built (if it used tokens) or an algorithm
   question; Claude asks and grades it without touching the code. Sessions with text typed in, or new tabs that have
   not answered yet, are never asked.
+- **Decorate the office** — **🎨 꾸미기** at the office's top right picks a floor/wall theme (dark wood, light wood,
+  checker tiles, navy carpet, forest) and lets you drag the plants, the rug and the earned furniture (bookshelf, sofa, aquarium).
+  「배치 초기화」 puts the furniture back; Esc or 「완료」 finishes. Saved on this computer, and kept in proportion when the panel is resized.
 - **Zoom** — Ctrl + / Ctrl − / Ctrl 0 (remembered); drag the panel edges to resize.
 
 ### How it works
