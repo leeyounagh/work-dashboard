@@ -16,10 +16,11 @@ import { java } from '@codemirror/lang-java';
 import { shell } from '@codemirror/legacy-modes/mode/shell';
 import { diff } from '@codemirror/legacy-modes/mode/diff';
 
-import { FileDiff, ReadFile } from '../../wailsjs/go/main/App';
+import { FileDiff, FindDefinition, ReadFile } from '../../wailsjs/go/main/App';
 import type { files } from '../../wailsjs/go/models';
 import type { TabHost } from '../tabs/tabHost';
 import { baseName, languageFor, pathKey, type Language } from './fileState';
+import { gotoTarget, NAVIGABLE, type GotoTarget } from './goto';
 
 const LANGUAGES: Record<Language, () => Extension> = {
   typescript: () => javascript({ typescript: true }),
@@ -88,7 +89,7 @@ const highlight = HighlightStyle.define([
   { tag: t.link, color: '#d4a27f', textDecoration: 'underline' },
 ]);
 
-function editor(parent: HTMLElement, text: string, lang: Language): EditorView {
+function editor(parent: HTMLElement, text: string, lang: Language, extra: Extension[] = []): EditorView {
   return new EditorView({
     parent,
     state: EditorState.create({
@@ -108,6 +109,7 @@ function editor(parent: HTMLElement, text: string, lang: Language): EditorView {
         theme,
         syntaxHighlighting(highlight),
         LANGUAGES[lang](),
+        ...extra,
       ],
     }),
   });
@@ -124,6 +126,7 @@ interface Viewer {
   view: EditorView;
   mode: 'file' | 'diff';
   request: number; // bumps on every reload so stale responses are dropped
+  show: (mode: 'file' | 'diff') => Promise<void>;
 }
 
 const fileTabId = (path: string) => `file:${pathKey(path)}`;
@@ -131,11 +134,59 @@ const fileTabId = (path: string) => `file:${pathKey(path)}`;
 export class FileViewer {
   private readonly viewers = new Map<string, Viewer>();
   private readonly pending = new Map<string, Promise<void>>();
+  private readonly ctrlListeners = new AbortController();
 
   constructor(
     private readonly tabs: TabHost,
     private readonly onError: (message: string) => void,
-  ) {}
+  ) {
+    // Holding Ctrl (Cmd) turns the pointer into a hand over code, as in VS Code.
+    const { signal } = this.ctrlListeners;
+    const held = (on: boolean) => document.body.classList.toggle('ctrl-held', on);
+    window.addEventListener('keydown', (e) => held(e.ctrlKey || e.metaKey), { signal });
+    window.addEventListener('keyup', (e) => held(e.ctrlKey || e.metaKey), { signal });
+    window.addEventListener('blur', () => held(false), { signal });
+  }
+
+  /** Ctrl+click: go to where the clicked import or name is defined. */
+  private navigation(path: string, lang: Language, group?: string): Extension[] {
+    if (!NAVIGABLE.has(lang)) return [];
+    return [
+      EditorView.domEventHandlers({
+        mousedown: (e, view) => {
+          if (e.button !== 0 || !(e.ctrlKey || e.metaKey)) return false;
+          const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+          const target = pos === null ? null : gotoTarget(view.state.doc.toString(), pos);
+          if (!target) return false;
+          e.preventDefault();
+          void this.goto(path, target, group);
+          return true;
+        },
+      }),
+    ];
+  }
+
+  private async goto(from: string, target: GotoTarget, group?: string): Promise<void> {
+    try {
+      const loc = await FindDefinition(from, target.spec, target.name);
+      await this.open(loc.path, true, group);
+      await this.reveal(loc.path, loc.line);
+    } catch (err) {
+      // A name with no declaration here (a parameter, a global) just does nothing.
+      if (target.spec) this.onError(String(err));
+    }
+  }
+
+  /** Scrolls an open file to a line (1-based) and puts the cursor there. */
+  private async reveal(path: string, line: number) {
+    const viewer = this.viewers.get(fileTabId(path));
+    if (!viewer) return;
+    if (viewer.mode !== 'file') await viewer.show('file');
+    const { doc } = viewer.view.state;
+    const at = doc.line(Math.min(Math.max(1, line), doc.lines)).from;
+    viewer.view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: 'center' }) });
+    viewer.view.focus();
+  }
 
   /** Opens (or focuses) a file tab. With focus=false the current tab stays in front. */
   async open(path: string, focus = true, group?: string): Promise<void> {
@@ -187,7 +238,17 @@ export class FileViewer {
     pane.append(bar, host);
 
     const first = contentToText(content);
-    const viewer: Viewer = { view: editor(host, first.text, first.lang), mode: 'file', request: 0 };
+    const nav = (lang: Language) => {
+      const ext = this.navigation(path, lang, group);
+      host.classList.toggle('navigable', ext.length > 0);
+      return ext;
+    };
+    const viewer: Viewer = {
+      view: editor(host, first.text, first.lang, nav(first.lang)),
+      mode: 'file',
+      request: 0,
+      show: async () => {},
+    };
     this.viewers.set(id, viewer);
 
     const show = async (mode: 'file' | 'diff') => {
@@ -198,7 +259,8 @@ export class FileViewer {
         else next = contentToText(await ReadFile(path));
         // The tab was closed or a newer reload started while we waited.
         if (this.viewers.get(id) !== viewer || request !== viewer.request) return;
-        const fresh = editor(host, next.text, next.lang);
+        if (mode === 'diff') host.classList.remove('navigable');
+        const fresh = editor(host, next.text, next.lang, mode === 'file' ? nav(next.lang) : []);
         viewer.view.destroy();
         viewer.view = fresh;
         viewer.mode = mode;
@@ -207,6 +269,7 @@ export class FileViewer {
         this.onError(String(err));
       }
     };
+    viewer.show = show;
     diffBtn.addEventListener('click', () => void show(viewer.mode === 'diff' ? 'file' : 'diff'));
     reloadBtn.addEventListener('click', () => void show(viewer.mode));
 
@@ -233,6 +296,8 @@ export class FileViewer {
 
   /** Destroys every editor (used by Vite HMR). */
   dispose(): void {
+    this.ctrlListeners.abort();
+    document.body.classList.remove('ctrl-held');
     for (const v of this.viewers.values()) v.view.destroy();
     this.viewers.clear();
   }
