@@ -1,6 +1,11 @@
-import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type AgentState, type HookInput } from './agentState';
-import { drawBookshelf, drawDesk, drawRoom, drawRug } from './background';
-import { FONT, coffeeSpot, drawCelebration, drawCoffeeCounter, drawCrown, CROWN_H, CROWN_W, drawDeskClutter, drawEarnedFurniture, drawLamp, drawMvpFrame, drawNight, drawSunrise, drawSweat, wallSlots } from './decor';
+import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type HookInput } from './agentState';
+import { drawDesk, drawRoom } from './background';
+import { drawEditOverlay, drawItems } from './furniture';
+import { layoutItems, type Box } from './furnitureLayout';
+import { drawBubble, drawProgress, short } from './labels';
+import { themeOf } from './room';
+import { RoomEditor } from './roomEditor';
+import { FONT, coffeeSpot, drawCelebration, drawCoffeeCounter, drawCrown, CROWN_H, CROWN_W, drawDeskClutter, drawLamp, drawMvpFrame, drawNight, drawSunrise, drawSweat, wallSlots } from './decor';
 import {
   CELEBRATE_MS,
   SUNRISE_MS,
@@ -22,20 +27,11 @@ import { QUIZ_CHANCE, QUIZ_CHECK_MS, QUIZ_GAP_MS, QUIZ_OFFER_MS, canOffer, lowUs
 import { QuizBubble } from './quizBubble';
 import { CROWN_FLIGHT_MS, HIGH_FIVE_MS, HIGH_FIVE_REACH, HIGH_FIVE_WALK_MS, MAX_SEEN, NO_STREAK, STREAK_BREAK_MS, advanceBanners, crownFlight } from './fun';
 import { dayKey, emptyDay, freshDeploys, hopOffset, newlyEarned, nextStreak, pickHighFive, streakLevel, toDeployCards, waitingLong } from './fun';
-import type { Banner, DayRecord, Streak } from './fun';
+import type { Banner, DayRecord } from './fun';
 import { loadDay, saveDay } from './dayStore';
+import { newCharacter, type Character, type OfficeTerminal } from './character';
 import { drawBadges, drawBanner, drawClap, drawExclaim, drawFlame } from './funDecor';
-import { ACTION_ROW, FRAME, WALK_FRAMES, bobHeight, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect, sheets, type Direction } from './sprites';
-
-/** A terminal as the office sees it. */
-export interface OfficeTerminal {
-  id: string;
-  title: string; // terminal (tab) name, shown above the character
-  workspace: string; // workspace name, shown below
-  workspaceId: string;
-  kind: 'claude' | 'shell';
-  alive: boolean;
-}
+import { ACTION_ROW, FRAME, WALK_FRAMES, bobHeight, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect, sheets } from './sprites';
 
 const SCALE = 3; // CSS px per sprite pixel
 const SIZE = FRAME * SCALE;
@@ -47,39 +43,8 @@ const COLORS = {
   name: '#e3e5e8',
   label: '#9aa0a6',
   mvp: '#e5c07b',
-  bubble: '#e3e5e8',
-  bubbleText: '#1e1f22',
-  wait: '#e5c07b',
 };
 const FPS = 10; // pixel-art pace
-
-interface Character {
-  term: OfficeTerminal;
-  state: AgentState;
-  sheet: HTMLImageElement;
-  dog: boolean;
-  dir: Direction;
-  desk: number;
-  shown: boolean; // in the selected workspace
-  x: number;
-  y: number;
-  tx: number;
-  ty: number;
-  nextWander: number;
-  phase: number;
-  // An idle pose from rows 5–6 of your own sheets, held until poseUntil.
-  pose: number | null;
-  poseUntil: number;
-  nextPoseAt: number;
-  tokens: number; // this session's tokens since the dashboard opened it
-  celebrate: { at: number; label: string } | null; // a token milestone
-  wantsCoffee: boolean; // queueing at the empty pot
-  finished: boolean; // Claude finished a reply since the last prompt
-  streak: Streak; // working without a long break: a flame by the name
-  highFive: { partner: string; met: number | null; until: number } | null;
-}
-
-const short = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /** Everyone hops this long when one of my PRs is deployed. */
 const CHEER_MS = 4000;
@@ -122,6 +87,8 @@ export class Office {
   /** The MVP's terminal, and the crown on its way to a new MVP. */
   private mvpId: string | null = null;
   private crown: { from: { x: number; y: number }; to: string; at: number } | null = null;
+  /** The theme and where the user moved the furniture. */
+  private readonly editor: RoomEditor;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -136,14 +103,25 @@ export class Office {
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(canvas);
     this.quizBubble = new QuizBubble(canvas.parentElement ?? document.body);
+    this.editor = new RoomEditor(canvas.parentElement ?? document.body, canvas, {
+      boxes: () => this.layout(),
+      point: (e) => this.canvasPoint(e),
+      room: () => ({ w: this.width, h: this.height }),
+      redraw: () => this.draw(performance.now()),
+    });
     this.resize();
 
     const onClick = (e: MouseEvent) => {
+      if (this.editor.editing) return; // decorating: the furniture is dragged instead
       const hit = this.hitTest(e);
       if (hit === this.guide) this.onGuide();
       else if (hit) this.onPick(hit.term.id);
     };
     const onMove = (e: MouseEvent) => {
+      if (this.editor.editing) {
+        canvas.title = '';
+        return;
+      }
       const hit = this.hitTest(e);
       canvas.style.cursor = hit ? 'pointer' : 'default';
       if (hit === this.guide) canvas.title = '가이드 — 클릭하면 이 워크스페이스 기술에 맞는 블로그 · 아티클을 엽니다';
@@ -162,30 +140,7 @@ export class Office {
     const term: OfficeTerminal = { id: GUIDE_ID, title: '가이드', workspace: '', workspaceId: '', kind: 'claude', alive: true };
     // The user's guide.png, else the last character sheet.
     const sheet = this.art.guide ?? this.art.ninjas.at(-1) ?? this.art.dog;
-    return {
-      term,
-      state: { mood: 'idle', tool: '', since: 0 },
-      sheet,
-      dog: sheet === this.art.dog,
-      dir: 'down',
-      desk: -1,
-      shown: true,
-      x: 0,
-      y: 0,
-      tx: 0,
-      ty: 0,
-      nextWander: 0,
-      phase: 0,
-      pose: null,
-      poseUntil: 0,
-      nextPoseAt: performance.now() + 2000,
-      tokens: 0,
-      celebrate: null,
-      wantsCoffee: false,
-      finished: false,
-      streak: NO_STREAK,
-      highFive: null,
-    };
+    return newCharacter(term, sheet, this.art.dog, { x: 0, y: 0, desk: -1, shown: true, since: 0, phase: 0, nextPoseAt: performance.now() + 2000 });
   }
 
   /** The guide stands at the bottom right of the floor. */
@@ -226,30 +181,19 @@ export class Office {
       }
       const spot = deskSpot(i, this.width);
       const sheet = pickSheet(term.id, term.kind, this.art.ninjas, this.art.dog);
-      this.chars.set(term.id, {
-        term,
-        state: { mood: 'idle', tool: '', since: performance.now() },
-        sheet,
-        dog: sheet === this.art.dog,
-        dir: 'down',
-        desk: i,
-        shown,
-        x: spot.x,
-        y: this.height - 30,
-        tx: spot.x,
-        ty: this.height - 30,
-        nextWander: 0,
-        phase: Math.random() * Math.PI * 2,
-        pose: null,
-        poseUntil: 0,
-        nextPoseAt: performance.now() + 3000 + Math.random() * 8000,
-        tokens: 0,
-        celebrate: null,
-        wantsCoffee: false,
-        finished: false,
-        streak: NO_STREAK,
-        highFive: null,
-      });
+      const now = performance.now();
+      this.chars.set(
+        term.id,
+        newCharacter(term, sheet, this.art.dog, {
+          x: spot.x,
+          y: this.height - 30,
+          desk: i,
+          shown,
+          since: now,
+          phase: Math.random() * Math.PI * 2,
+          nextPoseAt: now + 3000 + Math.random() * 8000,
+        }),
+      );
     }
   }
 
@@ -320,6 +264,7 @@ export class Office {
     cancelAnimationFrame(this.frame);
     this.observer.disconnect();
     this.quizBubble.destroy();
+    this.editor.destroy();
     for (const off of this.cleanups) off();
   }
 
@@ -341,13 +286,16 @@ export class Office {
     if (changed) this.draw(performance.now());
   }
 
-  private hitTest(e: MouseEvent): Character | undefined {
+  /** A mouse position in canvas (CSS) pixels: under the UI zoom the box is scaled. */
+  private canvasPoint(e: MouseEvent): { x: number; y: number } {
     const r = this.canvas.getBoundingClientRect();
-    // Under the UI zoom the box is scaled; map back to canvas (CSS) pixels.
     const sx = r.width ? this.width / r.width : 1;
     const sy = r.height ? this.height / r.height : 1;
-    const x = (e.clientX - r.left) * sx;
-    const y = (e.clientY - r.top) * sy;
+    return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+  }
+
+  private hitTest(e: MouseEvent): Character | undefined {
+    const { x, y } = this.canvasPoint(e);
     // Front-most (lowest) character first, matching the drawing order.
     return [...this.visible(), this.guide]
       .sort((a, b) => b.y - a.y)
@@ -593,17 +541,29 @@ export class Office {
     return deskSpot(n - 1, this.width).y + DESK_H;
   }
 
+  /** The furniture this frame: where the user put it, else its default place. */
+  private layout(): Box[] {
+    return layoutItems({
+      room: { w: this.width, h: this.height },
+      wallH: WALL_H,
+      deskBottom: this.deskAreaBottom(),
+      hasDesks: this.visible().length > 0,
+      level: officeLevel(this.week),
+      spots: this.editor.prefs.spots,
+      editing: this.editor.editing,
+    });
+  }
+
   private draw(now: number) {
     const { ctx, width: w, height: h } = this;
-    drawRoom(ctx, w, h, WALL_H, plantHealth(this.usage.sevenDay));
+    drawRoom(ctx, w, h, WALL_H, themeOf(this.editor.prefs.theme));
     const shown = this.visible();
     // The full tab title: several default terminals are all just "Claude" by name.
     const best = mvp(shown.map((c) => ({ c, title: c.term.title, tokens: c.tokens })));
     this.trackMvp(best?.c ?? null, now);
     this.drawWallDecor(best);
-    if (shown.length) drawRug(ctx, w, this.deskAreaBottom(), h);
-    // Earned furniture, only where the floor below the desks has room (clear of the guide).
-    if (h - this.deskAreaBottom() >= 80 && w >= 360) drawEarnedFurniture(ctx, officeLevel(this.week), h - 6, (x, bottom) => drawBookshelf(ctx, x, bottom), this.tick);
+    const items = this.layout();
+    drawItems(ctx, items, plantHealth(this.usage.sevenDay), this.tick);
 
     this.placeGuide();
 
@@ -619,6 +579,7 @@ export class Office {
     drawSunrise(ctx, w, h, (now - this.sunriseAt) / SUNRISE_MS);
     const banner = this.banners[0];
     if (banner?.at != null) drawBanner(ctx, w, banner.text, now - banner.at);
+    if (this.editor.editing) drawEditOverlay(ctx, items, this.editor.active);
   }
 
   /** A new MVP: the crown flies over from the old one (when both are in the room). */
@@ -757,11 +718,11 @@ export class Office {
 
     // Progress of the current request sits between the name and the bubble.
     const progress = c.term.alive ? progressOf(c.state, now) : null;
-    if (progress) this.drawProgress(progress, c.x, y - 18);
+    if (progress) drawProgress(ctx, progress, c.x, y - 18);
     const bubbleBottom = progress ? y - 40 : y - 18;
     const coffee = c.wantsCoffee && !moving ? '커피…' : '';
     const text = c === this.guide ? GUIDE_BUBBLE : c.term.alive ? bubbleFor(c.state) || coffee : 'zZ';
-    if (text && !(c.state.mood === 'waiting' && this.tick % 8 >= 6)) this.drawBubble(text, c.x, bubbleBottom, c.state.mood === 'waiting');
+    if (text && !(c.state.mood === 'waiting' && this.tick % 8 >= 6)) drawBubble(ctx, text, c.x, bubbleBottom, c.state.mood === 'waiting');
 
     if (atDesk && sweating(c.tokens)) drawSweat(ctx, x + size - 4, y + 4, this.tick);
     if (c.celebrate) {
@@ -789,41 +750,5 @@ export class Office {
     ctx.fillText(name, c.x, y - 4);
     const level = c === this.guide ? 0 : streakLevel(c.streak, now);
     if (level) drawFlame(ctx, Math.round(c.x + half + 4), y - 4, level, this.tick);
-  }
-
-  /** A small bar (to-do fraction) and a label (2/5 step, or tools · time) above the name. */
-  private drawProgress(p: { fraction: number | null; text: string }, cx: number, bottom: number) {
-    const { ctx } = this;
-    const w = 64;
-    const x = Math.round(cx - w / 2);
-    if (p.fraction !== null) {
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(x, bottom - 6, w, 5);
-      ctx.fillStyle = '#73c991';
-      ctx.fillRect(x, bottom - 6, Math.round(w * Math.min(1, p.fraction)), 5);
-    }
-    ctx.font = `10px ${FONT}`;
-    ctx.textAlign = 'center';
-    const label = short(p.text, 18);
-    const tw = ctx.measureText(label).width + 8;
-    ctx.fillStyle = 'rgba(20,21,24,0.75)';
-    ctx.fillRect(Math.round(cx - tw / 2), bottom - 20, Math.round(tw), 13);
-    ctx.fillStyle = '#e3e5e8';
-    ctx.fillText(label, cx, bottom - 10);
-  }
-
-  private drawBubble(text: string, cx: number, bottom: number, alert: boolean) {
-    const { ctx } = this;
-    ctx.font = '10px "Cascadia Mono", Consolas, monospace';
-    const label = short(text, 14);
-    const w = Math.round(Math.min(ctx.measureText(label).width, 90) + 10);
-    const x = Math.round(cx - w / 2);
-    const y = bottom - 16;
-    ctx.fillStyle = alert ? COLORS.wait : COLORS.bubble;
-    ctx.fillRect(x, y, w, 14);
-    ctx.fillRect(Math.round(cx) - 2, y + 14, 4, 3); // tail
-    ctx.fillStyle = COLORS.bubbleText;
-    ctx.textAlign = 'center';
-    ctx.fillText(label, cx, y + 10);
   }
 }

@@ -144,43 +144,28 @@ export function drawCelebration(ctx: CanvasRenderingContext2D, x: number, headY:
   ctx.fillText(text, x, top + 12);
 }
 
-/**
- * Furniture earned over the week, along the bottom-left of the floor:
- * a bookshelf, then a sofa, then an aquarium.
- */
-export function drawEarnedFurniture(
-  ctx: CanvasRenderingContext2D,
-  level: number,
-  floorBottom: number,
-  bookshelf: (x: number, bottom: number) => { w: number; h: number },
-  tick: number,
-): void {
-  let x = 12;
-  if (level >= 1) {
-    const size = bookshelf(x, floorBottom);
-    x += size.w + 8;
-  }
-  if (level >= 2) {
-    const y = floorBottom - 30;
-    rect(ctx, '#6b3f5e', x, y, 70, 22); // seat
-    rect(ctx, '#7f4c70', x, y - 12, 70, 12); // back
-    rect(ctx, '#58324d', x - 4, y - 8, 8, 30); // arms
-    rect(ctx, '#58324d', x + 66, y - 8, 8, 30);
-    rect(ctx, '#e5c07b', x + 12, y - 6, 12, 8); // cushion
-    x += 84;
-  }
-  if (level >= 3) {
-    const y = floorBottom - 46;
-    rect(ctx, '#1b1c1f', x, y, 60, 40);
-    rect(ctx, '#245a7a', x + 3, y + 3, 54, 34);
-    rect(ctx, '#3a2a1a', x + 3, y + 31, 54, 6); // gravel
-    rect(ctx, '#3f8f5a', x + 8, y + 18, 3, 13); // weed
-    rect(ctx, '#3f8f5a', x + 46, y + 14, 3, 17);
-    const fx = x + 10 + ((tick * 2) % 36);
-    rect(ctx, '#e5884f', fx, y + 12, 7, 4); // fish
-    rect(ctx, '#e5884f', fx - 3, y + 11, 3, 6);
-    rect(ctx, 'rgba(255,255,255,0.6)', x + 30, y + 6 + (tick % 20), 2, 2); // bubble
-  }
+/** The sofa (earned furniture) with its top-left at (x, y): 78×34 px. */
+export function drawSofa(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  const sx = x + 4;
+  const sy = y + 12;
+  rect(ctx, '#6b3f5e', sx, sy, 70, 22); // seat
+  rect(ctx, '#7f4c70', sx, sy - 12, 70, 12); // back
+  rect(ctx, '#58324d', sx - 4, sy - 8, 8, 30); // arms
+  rect(ctx, '#58324d', sx + 66, sy - 8, 8, 30);
+  rect(ctx, '#e5c07b', sx + 12, sy - 6, 12, 8); // cushion
+}
+
+/** The aquarium (earned furniture) with its top-left at (x, y): 60×40 px, a fish swimming. */
+export function drawAquarium(ctx: CanvasRenderingContext2D, x: number, y: number, tick: number): void {
+  rect(ctx, '#1b1c1f', x, y, 60, 40);
+  rect(ctx, '#245a7a', x + 3, y + 3, 54, 34);
+  rect(ctx, '#3a2a1a', x + 3, y + 31, 54, 6); // gravel
+  rect(ctx, '#3f8f5a', x + 8, y + 18, 3, 13); // weed
+  rect(ctx, '#3f8f5a', x + 46, y + 14, 3, 17);
+  const fx = x + 10 + ((tick * 2) % 36);
+  rect(ctx, '#e5884f', fx, y + 12, 7, 4); // fish
+  rect(ctx, '#e5884f', fx - 3, y + 11, 3, 6);
+  rect(ctx, 'rgba(255,255,255,0.6)', x + 30, y + 6 + (tick % 20), 2, 2); // bubble
 }
 
 /** The night overlay (the room and desks; characters stay bright on top). */
