@@ -1,12 +1,12 @@
 import '@xterm/xterm/css/xterm.css';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
+import type { Terminal } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
 
 import { OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
 import { CanResolveFilePaths, ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
 import { carriesFiles, droppedPathsText } from './fileDrop';
 import { clipboardAction, osc52Text } from './clipboard';
-import { bridgeHangulInput } from './hangulInput';
+import { openTerminal } from './openTerminal';
 import { isMac } from '../lib/platform';
 import { base64ToBytes } from '../lib/workspaceDraft';
 import type { TabHost } from '../tabs/tabHost';
@@ -248,23 +248,21 @@ export class TerminalPanel {
     let session: Session;
     let dir: string;
     try {
-      term = new Terminal({
-        theme: THEME,
-        fontFamily: "'Cascadia Mono', Consolas, monospace",
-        fontSize: BASE_FONT * this.fontScale,
-        cursorBlink: true,
-        scrollback: 5000,
-        // Claude Code takes the mouse; Option+drag still selects text here (Shift+drag elsewhere).
-        macOptionClickForcesSelection: isMac(),
-      });
-      const fit = new FitAddon();
-      term.loadAddon(fit);
-      term.open(pane);
-      // macOS WebKit gets no composition events from the Korean IME (see hangulInput.ts).
-      if (isMac()) {
-        const t = term;
-        bridgeHangulInput(pane, (data) => t.input(data, true));
-      }
+      const opened = openTerminal(
+        pane,
+        {
+          theme: THEME,
+          fontFamily: "'Cascadia Mono', Consolas, monospace",
+          fontSize: BASE_FONT * this.fontScale,
+          cursorBlink: true,
+          scrollback: 5000,
+          // Claude Code takes the mouse; Option+drag still selects text here (Shift+drag elsewhere).
+          macOptionClickForcesSelection: isMac(),
+        },
+        isMac(),
+      );
+      term = opened.term;
+      const fit = opened.fit;
       fit.fit();
 
       const info = await launch(term.cols, term.rows);
