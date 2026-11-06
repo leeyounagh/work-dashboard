@@ -15,21 +15,22 @@ const (
 
 // Widget type IDs.
 const (
-	PRReviews      = "pr-reviews"
-	CIFailures     = "ci-failures"
-	ReviewQueue    = "review-queue"
-	LinearIssues   = "linear-issues"
-	LinearInbox    = "linear-inbox"
-	NotionSpecs    = "notion-specs"
-	TeamsDeploy    = "teams-deploy"
-	Worktrees      = "worktrees"
-	QA2Pass        = "qa-2pass"
-	ClaudeUsage    = "claude-usage"
-	SessionRestore = "session-restore"
-	Command        = "command"
-	Links          = "links"
-	FolderFiles    = "folder-files"
-	Todo           = "todo"
+	PRReviews       = "pr-reviews"
+	CIFailures      = "ci-failures"
+	ReviewQueue     = "review-queue"
+	LinearIssues    = "linear-issues"
+	LinearInbox     = "linear-inbox"
+	NotionSpecs     = "notion-specs"
+	TeamsDeploy     = "teams-deploy"
+	Worktrees       = "worktrees"
+	QA2Pass         = "qa-2pass"
+	ClaudeUsage     = "claude-usage"
+	SessionRestore  = "session-restore"
+	Command         = "command"
+	Links           = "links"
+	FolderFiles     = "folder-files"
+	Todo            = "todo"
+	ClaudeArtifacts = "claude-artifacts"
 )
 
 // retired widget types were removed from the dashboard; saved workspaces
@@ -202,6 +203,15 @@ func init() {
 			Multiple:    true,
 			Settings: []SettingSpec{
 				{Key: "links", Label: "링크 (이름=URL)", Kind: KindStringList, Default: []string{}},
+			},
+		},
+		Definition{
+			ID:          ClaudeArtifacts,
+			Name:        "Claude 아티팩트",
+			Description: "내 아티팩트와 공유받은 아티팩트를 claude.ai 갤러리에서 엽니다. 자주 보는 것은 고정해 둡니다",
+			Source:      SourceClaude,
+			Settings: []SettingSpec{
+				{Key: "pinned", Label: "고정할 아티팩트 (이름=https://claude.ai/…/artifact/…)", Kind: KindStringList, Default: []string{}},
 			},
 		},
 		Definition{

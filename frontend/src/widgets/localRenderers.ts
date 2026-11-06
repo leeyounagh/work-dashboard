@@ -284,6 +284,24 @@ export function renderLinks(d: LinksData, open: OpenURL): HTMLElement {
   return box;
 }
 
+interface ArtifactsData {
+  gallery: string;
+  pinned: Array<{ name: string; url: string }> | null;
+  invalid: string[] | null;
+}
+
+/** claude.ai artifacts: the gallery (yours and the ones shared with you) and the pinned few. */
+export function renderArtifacts(d: ArtifactsData, open: OpenURL): HTMLElement {
+  const box = h('div', 'w-links');
+  box.append(link('아티팩트 갤러리 열기', d.gallery, open, 'primary small-btn'));
+  box.append(h('p', 'muted small', '내 아티팩트와 공유받은 아티팩트가 claude.ai 갤러리에 함께 나옵니다.'));
+  const pinned = d.pinned ?? [];
+  if (!pinned.length) box.append(h('p', 'muted small', '자주 보는 아티팩트는 「설정」에 이름=아티팩트 링크로 넣으면 여기 고정됩니다.'));
+  for (const l of pinned) box.append(link(l.name, l.url, open, 'ghost small-btn'));
+  for (const bad of d.invalid ?? []) box.append(h('p', 'warn small', `claude.ai 아티팩트 링크가 아니라 뺐습니다: ${bad}`));
+  return box;
+}
+
 export function renderLinearInbox(d: LinearInboxData, open: OpenURL): HTMLElement {
   const box = h('div', 'w-list');
   const items = d.notifications ?? [];
@@ -356,6 +374,8 @@ export function renderLocal(type: string, data: unknown, open: OpenURL, actions?
       return renderCommand(data as CommandData);
     case 'links':
       return renderLinks(data as LinksData, open);
+    case 'claude-artifacts':
+      return renderArtifacts(data as ArtifactsData, open);
     case 'linear-inbox':
       return renderLinearInbox(data as LinearInboxData, open);
     case 'teams-deploy':

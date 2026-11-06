@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/leeyounagh/work-dashboard/internal/bridge"
 	"github.com/leeyounagh/work-dashboard/internal/sessions"
 	"github.com/leeyounagh/work-dashboard/internal/widget"
+	"github.com/leeyounagh/work-dashboard/internal/widgetdata"
 	"github.com/leeyounagh/work-dashboard/internal/workspace"
 )
 
@@ -410,5 +412,70 @@ func TestConnectorLookupRetriesOnceWhenNotLoaded(t *testing.T) {
 	}
 	if res := h.app.WidgetData(ws.ID, 0); res.Error != "" || calls.Load() != 2 {
 		t.Fatalf("error %q after %d calls", res.Error, calls.Load())
+	}
+}
+
+func TestClaudeArtifactsWidget(t *testing.T) {
+	h, ws, _, _ := localHarness(t,
+		widget.Instance{Type: widget.ClaudeArtifacts, Enabled: true, Settings: map[string]any{
+			"pinned": []any{
+				"주간 보고=https://claude.ai/artifact/abc123",
+				"팀 대시보드 = https://claude.ai/code/artifact/0f1e2d3c-aaaa-bbbb-cccc-123456789abc ",
+				"남의 사이트=https://example.com/artifact/1",
+				"채팅=https://claude.ai/chat/xyz",
+				"가짜=https://claude.ai.evil.com/artifact/1",
+				"http=http://claude.ai/artifact/1",
+				"이름 없음",
+			},
+		}},
+	)
+	res := h.app.WidgetData(ws.ID, 0)
+	if res.Error != "" {
+		t.Fatal(res.Error)
+	}
+	d := res.Data.(ArtifactsData)
+	if d.Gallery != "https://claude.ai/code/artifacts" {
+		t.Fatalf("gallery = %q", d.Gallery)
+	}
+	if len(d.Pinned) != 2 || d.Pinned[0].Name != "주간 보고" || d.Pinned[1].URL != "https://claude.ai/code/artifact/0f1e2d3c-aaaa-bbbb-cccc-123456789abc" {
+		t.Fatalf("pinned = %+v", d.Pinned)
+	}
+	want := []string{"이름 없음", "남의 사이트=https://example.com/artifact/1", "채팅=https://claude.ai/chat/xyz", "가짜=https://claude.ai.evil.com/artifact/1", "http=http://claude.ai/artifact/1"}
+	if fmt.Sprint(d.Invalid) != fmt.Sprint(want) {
+		t.Fatalf("invalid = %q, want %q", d.Invalid, want)
+	}
+	// Nothing pinned: empty lists, never null.
+	none := artifactsWidget(widgetdata.Settings{})
+	if none.Pinned == nil || none.Invalid == nil || len(none.Pinned)+len(none.Invalid) != 0 {
+		t.Fatalf("no pins = %+v", none)
+	}
+}
+
+func TestIsArtifactLink(t *testing.T) {
+	for _, c := range []struct {
+		url  string
+		want bool
+	}{
+		{"https://claude.ai/artifact/SLAxqW5CVMVrFPz3pp5QvK", true},
+		{"https://claude.ai/code/artifact/0f1e2d3c-aaaa-bbbb-cccc-123456789abc", true},
+		{"https://claude.ai/public/artifacts/0f1e2d3c-aaaa-bbbb-cccc-123456789abc", true},
+		{"https://claude.ai/artifact/abc_123/", true},
+		{"https://claude.ai/artifact/abc?utm=x#top", true},
+		{"https://claude.ai/artifact/", false},
+		{"https://claude.ai/artifact/a/b", false},
+		{"https://claude.ai/artifact/%2e%2e", false},
+		{"https://claude.ai@evil.com/artifact/1", false},
+		{"https://user@claude.ai/artifact/1", false},
+		{"https://www.claude.ai/artifact/1", false},
+		{"https://claude.ai.evil.com/artifact/1", false},
+		{"https://claude.ai:8443/artifact/1", false},
+		{"http://claude.ai/artifact/1", false},
+		{"javascript:alert(1)//claude.ai/artifact/1", false},
+		{"https://claude.ai/artifacts/1", false},
+		{"https://claude.ai/chat/1", false},
+	} {
+		if got := isArtifactLink(c.url); got != c.want {
+			t.Errorf("isArtifactLink(%q) = %v, want %v", c.url, got, c.want)
+		}
 	}
 }
