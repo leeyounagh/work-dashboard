@@ -225,3 +225,10 @@ func TestCustomWidgetsAllowSeveralInstances(t *testing.T) {
 		t.Fatal("Key")
 	}
 }
+
+func TestClaudeArtifactsIsOneClaudeWidget(t *testing.T) {
+	def, ok := Lookup(ClaudeArtifacts)
+	if !ok || def.Multiple || def.Source != SourceClaude || len(def.Settings) != 1 || def.Settings[0].Key != "pinned" {
+		t.Fatalf("claude-artifacts = %+v (found %v)", def, ok)
+	}
+}

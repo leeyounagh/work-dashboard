@@ -118,4 +118,26 @@ describe('renderLocal', () => {
     const el = renderLocal('folder-files', { folder: 'C:\docs', total: 0, limit: 20, files: null }, open)!;
     expect(el.textContent).toContain('문서가 없습니다');
   });
+
+  it('opens the artifacts gallery and the pinned artifacts', () => {
+    open.mockClear();
+    const el = renderLocal(
+      'claude-artifacts',
+      { gallery: 'https://claude.ai/code/artifacts', pinned: [{ name: '주간 보고', url: 'https://claude.ai/artifact/abc' }], invalid: ['남의 사이트=https://example.com'] },
+      open,
+    )!;
+    const buttons = [...el.querySelectorAll('button')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['아티팩트 갤러리 열기', '주간 보고']);
+    buttons[0].click();
+    buttons[1].click();
+    expect(open.mock.calls).toEqual([['https://claude.ai/code/artifacts'], ['https://claude.ai/artifact/abc']]);
+    expect(el.textContent).toContain('내 아티팩트와 공유받은 아티팩트');
+    expect(el.textContent).toContain('남의 사이트=https://example.com');
+    expect(el.textContent).not.toContain('「설정」');
+  });
+
+  it('explains how to pin artifacts when none are pinned', () => {
+    const el = renderLocal('claude-artifacts', { gallery: 'https://claude.ai/code/artifacts', pinned: null, invalid: null }, open)!;
+    expect(el.textContent).toContain('「설정」');
+  });
 });

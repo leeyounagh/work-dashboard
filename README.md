@@ -46,6 +46,8 @@ Claude 화면에서 마우스로 드래그해 선택하면 바로 클립보드�
     채팅방은 Teams 「링크 복사」 주소를 넣고, 내 GitHub 아이디를 넣으면 내 PR 이 표시됩니다.
     한 번 읽은 카드는 저장해 두고 새 카드만 읽습니다 (첫 읽기 약 $0.1, 이어 읽기 약 $0.01).
   - 워크트리 상태, QA 실행, Claude 한도·로그인, 세션 복원
+  - **Claude 아티팩트**: 내 아티팩트와 공유받은 아티팩트를 claude.ai 갤러리로 열고, 자주 보는 아티팩트는 「설정」에 이름=링크로 고정합니다
+    (헤드리스 Claude 로는 아티팩트 목록을 읽을 수 없어 목록은 갤러리에서 봅니다)
   - 오늘 할 일: 적고 체크, 끝낸 항목은 다음 날 정리
   - 직접 만드는 위젯 (여러 개 추가 가능): **명령 출력**(셸 없이 실행), **링크 모음**, **폴더 문서**(최근 수정 순, 누르면 기본 앱으로 열기)
   - 문서 위젯(폴더 문서·Notion 명세·QA 보고서)에는 검색창이 있습니다
@@ -192,6 +194,8 @@ A mouse selection in Claude is copied straight to the clipboard; hold **Option**
     only its own deploys. Paste the chat's "Copy link" address; add your GitHub login to mark your PRs. Cards are kept
     once read, so later refreshes only read new ones (about $0.1 the first time, about $0.01 after).
   - Worktrees, QA runs, Claude usage limits & login, session restore
+  - **Claude artifacts**: opens the claude.ai gallery of your artifacts and the ones shared with you; pin the ones you open often
+    as name=link in its settings (headless Claude cannot list artifacts, so the list itself is in the gallery)
   - Today's to-dos: write, tick, finished items are cleared the next day
   - Your own widgets, as many as you like: **command output** (no shell), **links**, **folder documents** (newest first,
     opens with the default app)

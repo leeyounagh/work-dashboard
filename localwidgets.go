@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -207,6 +208,8 @@ func (a *App) buildLocalWidget(ctx context.Context, ws workspace.Workspace, typ 
 		return a.commandWidget(ctx, ws, s)
 	case widget.Links:
 		return linksWidget(s), nil
+	case widget.ClaudeArtifacts:
+		return artifactsWidget(s), nil
 	case widget.FolderFiles:
 		return folderFiles(s)
 	case widget.Todo:
@@ -508,6 +511,42 @@ func linksWidget(s widgetdata.Settings) LinksData {
 			continue
 		}
 		d.Links = append(d.Links, Link{Name: name, URL: url})
+	}
+	return d
+}
+
+// artifactsGallery lists the user's own artifacts and the ones shared with
+// them. There is no headless way to list them (the Artifact tool exists only
+// in interactive Claude Code), so the widget links there instead.
+const artifactsGallery = "https://claude.ai/code/artifacts"
+
+// artifactPath is the path of a claude.ai artifact page: /artifact/<id>,
+// /code/artifact/<id> or a published /public/artifacts/<id>.
+var artifactPath = regexp.MustCompile(`^/(?:(?:code/)?artifact|public/artifacts)/[A-Za-z0-9_-]+/?$`)
+
+// isArtifactLink reports whether raw is an https link to an artifact on
+// claude.ai itself (no other host, no user info); a query or fragment is fine.
+func isArtifactLink(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https" && u.Host == "claude.ai" && u.User == nil && artifactPath.MatchString(u.Path)
+}
+
+// ArtifactsData feeds the Claude artifacts widget.
+type ArtifactsData struct {
+	Gallery string   `json:"gallery"`
+	Pinned  []Link   `json:"pinned"`
+	Invalid []string `json:"invalid"` // entries that are not name=claude.ai artifact link
+}
+
+func artifactsWidget(s widgetdata.Settings) ArtifactsData {
+	links := linksWidget(widgetdata.Settings{"links": s.Strings("pinned")})
+	d := ArtifactsData{Gallery: artifactsGallery, Pinned: []Link{}, Invalid: links.Invalid}
+	for _, l := range links.Links {
+		if !isArtifactLink(l.URL) {
+			d.Invalid = append(d.Invalid, l.Name+"="+l.URL)
+			continue
+		}
+		d.Pinned = append(d.Pinned, l)
 	}
 	return d
 }
