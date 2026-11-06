@@ -14,15 +14,21 @@ export const ITEM_SIZE: Record<FurnitureId, Size> = {
   aquarium: { w: 60, h: 40 },
 };
 
-/** Tallest a standee is drawn (CSS px); its picture keeps its proportions. */
-export const DECOR_H = 96;
+/** Largest a standee is drawn (CSS px, either side); its picture keeps its proportions. */
+export const DECOR_MAX = 128;
 /** Room kept at the bottom right for the guide. */
 const GUIDE_GAP = 96;
 
-/** Drawn size of a standee picture of naturalWidth × naturalHeight. */
+/**
+ * Drawn size of a standee picture of naturalWidth × naturalHeight. Small
+ * (pixel-art) pictures are drawn at a whole multiple of their size, so they
+ * stay crisp; shrinking one by a fraction blurs its lines. Larger pictures
+ * are shrunk to fit.
+ */
 export function decorSize(nw: number, nh: number): Size {
   if (nw <= 0 || nh <= 0) return { w: 0, h: 0 };
-  const scale = Math.min(DECOR_H / nh, DECOR_H / nw);
+  const fit = Math.min(DECOR_MAX / nh, DECOR_MAX / nw);
+  const scale = fit >= 1 ? Math.floor(fit) : fit;
   return { w: Math.max(1, Math.round(nw * scale)), h: Math.max(1, Math.round(nh * scale)) };
 }
 
@@ -56,7 +62,7 @@ function defaultPlace(id: ItemId, i: LayoutInput): { x: number; y: number; fits:
     // clear of the wall's frame and counter and of the desks.
     const k = decorIndex(id);
     const size = i.decor[k];
-    return { x: w - GUIDE_GAP - (k + 1) * (DECOR_H / 2 + 12), y: h - FLOOR_GAP - size.h, fits: true };
+    return { x: w - GUIDE_GAP - (k + 1) * (DECOR_MAX / 2 + 12), y: h - FLOOR_GAP - size.h, fits: true };
   }
   const size = ITEM_SIZE[id];
   const floorBottom = h - FLOOR_GAP;

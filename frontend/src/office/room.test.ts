@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WALL_H } from './agentState';
-import { DECOR_H, ITEM_SIZE, decorSize, itemAt, layoutItems, type LayoutInput } from './furnitureLayout';
+import { DECOR_MAX, ITEM_SIZE, decorSize, itemAt, layoutItems, type LayoutInput } from './furnitureLayout';
 import { DEFAULT_PREFS, THEMES, boxToSpot, decorIndex, itemName, parsePrefs, spotToBox, themeOf, withSpot, withTheme, withoutSpots } from './room';
 
 describe('room preferences', () => {
@@ -122,9 +122,10 @@ describe('standees', () => {
     decor: [],
   };
 
-  it('draws a picture at most DECOR_H tall or wide, keeping its proportions', () => {
-    expect(decorSize(50, 115)).toEqual({ w: 42, h: DECOR_H });
-    expect(decorSize(200, 100)).toEqual({ w: DECOR_H, h: 48 });
+  it('draws small pictures at a whole multiple of their size (crisp), and shrinks big ones to fit', () => {
+    expect(decorSize(50, 115)).toEqual({ w: 50, h: 115 });
+    expect(decorSize(20, 40)).toEqual({ w: 60, h: 120 });
+    expect(decorSize(400, 200)).toEqual({ w: DECOR_MAX, h: 64 });
     expect(decorSize(0, 0)).toEqual({ w: 0, h: 0 });
   });
 
