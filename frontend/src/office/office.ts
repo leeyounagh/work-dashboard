@@ -1,7 +1,8 @@
 import { DESK_H, SEAT_Y, WALL_H, bubbleFor, deskSpot, nameLabel, nextState, progressOf, type HookInput } from './agentState';
 import { drawDesk, drawRoom } from './background';
 import { drawEditOverlay, drawItems } from './furniture';
-import { layoutItems, type Box } from './furnitureLayout';
+import { decorSize, layoutItems, type Box } from './furnitureLayout';
+import { PetCrew, petWorld, type PetArt } from './pets';
 import { drawBubble, drawProgress, short } from './labels';
 import { themeOf } from './room';
 import { RoomEditor } from './roomEditor';
@@ -89,6 +90,9 @@ export class Office {
   private crown: { from: { x: number; y: number }; to: string; at: number } | null = null;
   /** The theme and where the user moved the furniture. */
   private readonly editor: RoomEditor;
+  /** The user's own pets and standees (~/.work-dashboard/pets, decor). */
+  private readonly pets = new PetCrew();
+  private decor: HTMLImageElement[] = [];
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -114,7 +118,9 @@ export class Office {
     const onClick = (e: MouseEvent) => {
       if (this.editor.editing) return; // decorating: the furniture is dragged instead
       const hit = this.hitTest(e);
-      if (hit === this.guide) this.onGuide();
+      const pet = this.petAt(e, hit);
+      if (pet >= 0) this.pets.click(pet, performance.now());
+      else if (hit === this.guide) this.onGuide();
       else if (hit) this.onPick(hit.term.id);
     };
     const onMove = (e: MouseEvent) => {
@@ -122,10 +128,11 @@ export class Office {
         canvas.title = '';
         return;
       }
-      const hit = this.hitTest(e);
-      canvas.style.cursor = hit ? 'pointer' : 'default';
+      const pet = this.petAt(e, this.hitTest(e)) >= 0;
+      const hit = pet ? undefined : this.hitTest(e);
+      canvas.style.cursor = hit || pet ? 'pointer' : 'default';
       if (hit === this.guide) canvas.title = '가이드 — 클릭하면 이 워크스페이스 기술에 맞는 블로그 · 아티클을 엽니다';
-      else canvas.title = hit ? `${hit.term.title} — 클릭하면 터미널로 이동` : '';
+      else canvas.title = hit ? `${hit.term.title} — 클릭하면 터미널로 이동` : pet ? '사무실 펫 — 클릭하면 인사해요' : '';
     };
     canvas.addEventListener('click', onClick);
     canvas.addEventListener('mousemove', onMove);
@@ -151,12 +158,32 @@ export class Office {
     this.guide = { ...this.guide, x, y, tx: x, ty: y };
   }
 
+  /** The user's pets and standee pictures. */
+  setOfficeArt(pets: readonly PetArt[], decor: readonly string[]): void {
+    this.pets.set(pets);
+    this.decor = decor.map((url) => {
+      const img = new Image();
+      img.src = url;
+      return img;
+    });
+  }
+
+  /** The pet under the pointer, unless the character there is drawn in front of it; -1 for none. */
+  private petAt(e: MouseEvent, hit: Character | undefined): number {
+    const { x, y } = this.canvasPoint(e);
+    const i = this.pets.hit(x, y);
+    return i >= 0 && (!hit || this.pets.footY(i) >= hit.y) ? i : -1;
+  }
+
   /** Reloads the character sheets (after custom sprites were found). */
   reloadArt(): void {
     this.art = sheets();
     this.guide = { ...this.newGuide(), x: this.guide.x, y: this.guide.y, tx: this.guide.tx, ty: this.guide.ty };
+    const used: HTMLImageElement[] = [];
     for (const c of this.chars.values()) {
-      if (!c.dog) c.sheet = pickSheet(c.term.id, c.term.kind, this.art.ninjas, this.art.dog);
+      if (c.dog) continue;
+      c.sheet = pickSheet(c.term.kind, this.art.ninjas, this.art.dog, used);
+      used.push(c.sheet);
     }
   }
 
@@ -180,7 +207,8 @@ export class Office {
         continue;
       }
       const spot = deskSpot(i, this.width);
-      const sheet = pickSheet(term.id, term.kind, this.art.ninjas, this.art.dog);
+      const inUse = [...this.chars.values()].map((c) => c.sheet);
+      const sheet = pickSheet(term.kind, this.art.ninjas, this.art.dog, inUse);
       const now = performance.now();
       this.chars.set(
         term.id,
@@ -390,10 +418,23 @@ export class Office {
         if (busy) c.dir = 'up';
       }
     }
+    this.updatePets(now);
     this.updateQuiz(now);
     this.updateHighFives(now);
     this.updateAchievements(now);
     this.banners = advanceBanners(this.banners, now);
+  }
+
+  private updatePets(now: number) {
+    const chars = this.visible().map((c) => ({
+      id: c.term.id,
+      x: c.x,
+      y: c.y,
+      streak: streakLevel(c.streak, now) > 0,
+      waitLong: waitingLong(c.state, c.term.alive, now),
+      working: c.term.alive && c.state.mood !== 'idle',
+    }));
+    this.pets.update(petWorld({ w: this.width, h: this.height }, this.deskAreaBottom() + 30, this.layout(), chars), now);
   }
 
   /** A session that just finished gets a high five from the nearest idle character. */
@@ -551,6 +592,7 @@ export class Office {
       level: officeLevel(this.week),
       spots: this.editor.prefs.spots,
       editing: this.editor.editing,
+      decor: this.decor.map((img) => decorSize(img.naturalWidth, img.naturalHeight)),
     });
   }
 
@@ -563,7 +605,7 @@ export class Office {
     this.trackMvp(best?.c ?? null, now);
     this.drawWallDecor(best);
     const items = this.layout();
-    drawItems(ctx, items, plantHealth(this.usage.sevenDay), this.tick);
+    drawItems(ctx, items, plantHealth(this.usage.sevenDay), this.tick, this.decor);
 
     this.placeGuide();
 
@@ -573,7 +615,8 @@ export class Office {
     drawNight(ctx, w, h, light.dark);
     if (light.lamps) for (const c of shown) this.drawDeskLamp(c);
     // Back to front so lower characters overlap higher ones.
-    for (const c of [...shown, this.guide].sort((a, b) => a.y - b.y)) this.drawCharacter(c, now, c === best?.c);
+    const actors = [...shown, this.guide].map((c) => ({ y: c.y, draw: () => this.drawCharacter(c, now, c === best?.c) }));
+    for (const a of [...actors, ...this.pets.actors(ctx, this.tick)].sort((p, q) => p.y - q.y)) a.draw();
     this.drawHighFives(shown, now);
     this.drawCrownFlight(now);
     drawSunrise(ctx, w, h, (now - this.sunriseAt) / SUNRISE_MS);

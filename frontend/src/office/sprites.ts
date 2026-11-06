@@ -46,20 +46,17 @@ export function directionFor(dx: number, dy: number): Direction {
   return dy > 0 ? 'down' : 'up';
 }
 
-/** Stable small hash so a terminal keeps its character. */
-export function hash(text: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-/** Claude sessions get one of the ninjas; shells are the office dog. */
-export function pickSheet<T>(id: string, kind: 'claude' | 'shell', sheets: readonly T[], dog: T): T {
+/**
+ * A new Claude session's sheet: a random one no other session is using
+ * (any of them once all are taken). Terminal ids restart at t1 with every
+ * launch, so picking by id gave the same characters each time. Shells are
+ * the office dog.
+ */
+export function pickSheet<T>(kind: 'claude' | 'shell', sheets: readonly T[], dog: T, inUse: readonly T[], rnd: () => number = Math.random): T {
   if (kind === 'shell' || !sheets.length) return dog;
-  return sheets[hash(id) % sheets.length];
+  const free = sheets.filter((s) => !inUse.includes(s));
+  const pool = free.length ? free : sheets;
+  return pool[Math.min(pool.length - 1, Math.floor(rnd() * pool.length))];
 }
 
 // Bundled by Vite; each value is the asset URL.

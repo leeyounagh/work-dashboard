@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"os"
 	"os/exec"
@@ -60,11 +61,20 @@ func askClaude(ctx context.Context, dir string, args ...string) ([]byte, error) 
 	return claudeask.Claude(exe)(ctx, dir, args...)
 }
 
-func instanceID() string {
-	if devBuild {
-		return "work-dashboard-dev.leeyounagh.github.io"
+// instanceID names the single-instance lock. An app on another data folder
+// (WD_DATA_DIR: demos, trying a build next to the one in use) is a separate
+// instance; two on the same folder would clobber each other's state.
+func instanceID(dev bool, dataDir string) string {
+	id := "work-dashboard.leeyounagh.github.io"
+	if dev {
+		id = "work-dashboard-dev.leeyounagh.github.io"
 	}
-	return "work-dashboard.leeyounagh.github.io"
+	if dataDir == "" {
+		return id
+	}
+	h := fnv.New32a()
+	h.Write([]byte(strings.ToLower(filepath.Clean(dataDir))))
+	return fmt.Sprintf("%s.%08x", id, h.Sum32())
 }
 
 func main() {
@@ -123,6 +133,8 @@ func main() {
 		Sessions:      sessionStore,
 		Restorable:    restorable,
 		CharactersDir: filepath.Join(filepath.Dir(dir), "characters"),
+		PetsDir:       filepath.Join(filepath.Dir(dir), "pets"),
+		DecorDir:      filepath.Join(filepath.Dir(dir), "decor"),
 		TodosDir:      filepath.Join(filepath.Dir(dir), "todos"),
 		Claude:        claudeacct.New(claudeacct.Options{}),
 		RunDir:        runDir,
@@ -147,7 +159,7 @@ func main() {
 		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
 		SingleInstanceLock: &options.SingleInstanceLock{
 			// Dev builds use their own id so `wails dev` never blocks the installed app.
-			UniqueId: instanceID(),
+			UniqueId: instanceID(devBuild, os.Getenv("WD_DATA_DIR")),
 		},
 		Bind: []any{app},
 	})

@@ -2,11 +2,16 @@
 import { drawBookshelf, drawPlant, drawRug } from './background';
 import { FONT, drawAquarium, drawSofa } from './decor';
 import type { Box } from './furnitureLayout';
-import { ITEMS, type ItemId } from './room';
+import { decorIndex, itemName, type ItemId } from './room';
 import type { PlantHealth } from './vibe';
 
-export function drawItems(ctx: CanvasRenderingContext2D, boxes: Box[], plants: PlantHealth, tick: number): void {
+export function drawItems(ctx: CanvasRenderingContext2D, boxes: Box[], plants: PlantHealth, tick: number, decor: readonly HTMLImageElement[] = []): void {
   for (const b of boxes) {
+    const k = decorIndex(b.id);
+    if (k >= 0) {
+      drawStandee(ctx, b, decor[k]);
+      continue;
+    }
     switch (b.id) {
       case 'plantLeft':
       case 'plantRight':
@@ -28,6 +33,17 @@ export function drawItems(ctx: CanvasRenderingContext2D, boxes: Box[], plants: P
   }
 }
 
+/** A standee: the user's picture on a small base, with a shadow on the floor. */
+function drawStandee(ctx: CanvasRenderingContext2D, b: Box, img: HTMLImageElement | undefined): void {
+  if (!img?.complete || !img.naturalWidth) return;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(b.x + 4, b.y + b.h - 3, b.w - 8, 4);
+  // Pixel art stays crisp when enlarged; bigger pictures are smoothed when shrunk.
+  ctx.imageSmoothingEnabled = img.naturalHeight > b.h;
+  ctx.drawImage(img, b.x, b.y, b.w, b.h);
+  ctx.imageSmoothingEnabled = false;
+}
+
 /** While decorating: a dashed outline round each piece, the active one highlighted and named. */
 export function drawEditOverlay(ctx: CanvasRenderingContext2D, boxes: Box[], active: ItemId | null): void {
   ctx.save();
@@ -40,7 +56,7 @@ export function drawEditOverlay(ctx: CanvasRenderingContext2D, boxes: Box[], act
     if (!on) continue;
     ctx.font = `bold 11px ${FONT}`;
     ctx.textAlign = 'center';
-    const label = ITEMS[b.id].name;
+    const label = itemName(b.id);
     const tw = ctx.measureText(label).width + 8;
     const ty = Math.max(0, b.y - 16);
     ctx.fillStyle = 'rgba(20, 21, 24, 0.85)';

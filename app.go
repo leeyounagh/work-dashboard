@@ -75,6 +75,9 @@ type Deps struct {
 	Sessions sessionStore
 	// CharactersDir holds the user's own character sprite sheets.
 	CharactersDir string
+	// PetsDir and DecorDir hold the user's office pets and cut-out standees.
+	PetsDir  string
+	DecorDir string
 	// Restorable are sessions that were open when the app last exited.
 	Restorable []sessions.Record
 	// TodosDir holds each workspace's to-do list.

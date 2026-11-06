@@ -2,10 +2,10 @@
  * Where the movable furniture stands this frame: where the user put it, or
  * its default place. Kept apart from the drawing so it can be tested.
  */
-import { ITEMS, ITEM_IDS, spotToBox, type ItemId, type Size, type Spot } from './room';
+import { ITEMS, ITEM_IDS, decorId, decorIndex, isFurniture, spotToBox, type FurnitureId, type ItemId, type Size, type Spot } from './room';
 
 /** Drawn size in CSS px of each piece. */
-export const ITEM_SIZE: Record<ItemId, Size> = {
+export const ITEM_SIZE: Record<FurnitureId, Size> = {
   plantLeft: { w: 32, h: 64 },
   plantRight: { w: 32, h: 64 },
   rug: { w: 96, h: 96 },
@@ -13,6 +13,18 @@ export const ITEM_SIZE: Record<ItemId, Size> = {
   sofa: { w: 78, h: 34 },
   aquarium: { w: 60, h: 40 },
 };
+
+/** Tallest a standee is drawn (CSS px); its picture keeps its proportions. */
+export const DECOR_H = 96;
+/** Room kept at the bottom right for the guide. */
+const GUIDE_GAP = 96;
+
+/** Drawn size of a standee picture of naturalWidth × naturalHeight. */
+export function decorSize(nw: number, nh: number): Size {
+  if (nw <= 0 || nh <= 0) return { w: 0, h: 0 };
+  const scale = Math.min(DECOR_H / nh, DECOR_H / nw);
+  return { w: Math.max(1, Math.round(nw * scale)), h: Math.max(1, Math.round(nh * scale)) };
+}
 
 export interface Box {
   id: ItemId;
@@ -30,6 +42,7 @@ export interface LayoutInput {
   level: number; // furniture earned this week (vibe.officeLevel)
   spots: Partial<Record<ItemId, Spot>>;
   editing: boolean; // everything earned is shown while decorating
+  decor: Size[]; // the standees' drawn sizes (0 × 0 while a picture loads)
 }
 
 /** Gap kept between the floor's bottom edge and the earned furniture. */
@@ -38,6 +51,13 @@ const FLOOR_GAP = 6;
 /** Default top-left of each piece, and whether the room has space for it there. */
 function defaultPlace(id: ItemId, i: LayoutInput): { x: number; y: number; fits: boolean } {
   const { w, h } = i.room;
+  if (!isFurniture(id)) {
+    // Along the bottom of the floor, leftward from the guide (bottom right),
+    // clear of the wall's frame and counter and of the desks.
+    const k = decorIndex(id);
+    const size = i.decor[k];
+    return { x: w - GUIDE_GAP - (k + 1) * (DECOR_H / 2 + 12), y: h - FLOOR_GAP - size.h, fits: true };
+  }
   const size = ITEM_SIZE[id];
   const floorBottom = h - FLOOR_GAP;
   // The earned row along the bottom left, clear of the guide (bottom right).
@@ -68,9 +88,11 @@ const clampInto = (v: number, size: number, room: number) => Math.round(Math.min
 /** The pieces to draw, in drawing order: the rug on the floor first, then back to front. */
 export function layoutItems(i: LayoutInput): Box[] {
   const boxes: Box[] = [];
-  for (const id of ITEM_IDS) {
-    if (i.level < ITEMS[id].level) continue;
-    const size = ITEM_SIZE[id];
+  const pieces: Array<{ id: ItemId; size: Size }> = [
+    ...ITEM_IDS.filter((id) => i.level >= ITEMS[id].level).map((id) => ({ id: id as ItemId, size: ITEM_SIZE[id] })),
+    ...i.decor.map((size, k) => ({ id: decorId(k) as ItemId, size })).filter((p) => p.size.w > 0 && p.size.h > 0),
+  ];
+  for (const { id, size } of pieces) {
     const spot = i.spots[id];
     // A piece the user placed stays where they put it (kept inside the room),
     // even where its default place would have no space.
