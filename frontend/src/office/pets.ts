@@ -4,8 +4,17 @@ import { drawBubble } from './labels';
 import { PET_COLS, PET_ROWS, clickPet, newPet, petAnim, petFrame, stepPet, type Pet, type PetWorld } from './pet';
 import { decorIndex } from './room';
 
-/** How tall a pet is drawn (CSS px); the width follows the sheet's frames. */
-export const PET_H = 64;
+/** How tall a pet with big frames is drawn (CSS px); the width follows the frames. */
+export const PET_H = 80;
+/** Frames up to this tall are drawn as they are: shrinking by a fraction blurs them. */
+export const PET_MAX = 112;
+
+/** Drawn size of one frame of fw × fh px (and whether it is shrunk, so smoothed). */
+export function petDrawSize(fw: number, fh: number): { w: number; h: number; scaled: boolean } {
+  if (fw <= 0 || fh <= 0) return { w: PET_H, h: PET_H, scaled: false };
+  if (fh <= PET_MAX) return { w: fw, h: fh, scaled: false };
+  return { w: Math.round((fw * PET_H) / fh), h: PET_H, scaled: true };
+}
 const BUBBLE_MAX = 22;
 
 export interface PetArt {
@@ -61,11 +70,8 @@ export class PetCrew {
     }
   }
 
-  /** Drawn size: PET_H tall, as wide as the sheet's frames allow. */
-  private size(m: Member): { w: number; h: number } {
-    const fw = m.img.naturalWidth / PET_COLS;
-    const fh = m.img.naturalHeight / PET_ROWS;
-    return { w: fh > 0 ? Math.round((fw * PET_H) / fh) : PET_H, h: PET_H };
+  private size(m: Member): { w: number; h: number; scaled: boolean } {
+    return petDrawSize(m.img.naturalWidth / PET_COLS, m.img.naturalHeight / PET_ROWS);
   }
 
   /** The front-most pet under (x, y), or -1. */
@@ -100,7 +106,7 @@ export class PetCrew {
   private draw(ctx: CanvasRenderingContext2D, m: Member, tick: number) {
     const p = m.pet;
     if (!p || !m.img.complete || !m.img.naturalWidth) return;
-    const { w, h } = this.size(m);
+    const { w, h, scaled } = this.size(m);
     const fw = m.img.naturalWidth / PET_COLS;
     const fh = m.img.naturalHeight / PET_ROWS;
     const { col, row } = petFrame(petAnim(p), tick);
@@ -108,8 +114,8 @@ export class PetCrew {
     const y = Math.round(p.y - h);
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(Math.round(p.x - w / 6), Math.round(p.y) - 2, Math.round(w / 3), 3);
-    // Sheets are drawn large and shrunk here, so smooth them.
-    ctx.imageSmoothingEnabled = true;
+    // Drawn as is when small enough (crisp); big frames are shrunk, so smoothed.
+    ctx.imageSmoothingEnabled = scaled;
     ctx.drawImage(m.img, col * fw, row * fh, fw, fh, x, y, w, h);
     ctx.imageSmoothingEnabled = false;
     if (p.line) drawBubble(ctx, p.line, p.x, y + 6, false, BUBBLE_MAX);

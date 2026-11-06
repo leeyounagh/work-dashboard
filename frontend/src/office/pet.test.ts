@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PET_H, petWorld } from './pets';
+import { PET_H, PET_MAX, petDrawSize, petWorld } from './pets';
 import { LINE_MS, PET_SPEED, WAVE_MS, clickPet, newPet, petAnim, petFrame, planPet, stepPet, type PetWorld } from './pet';
 
 const world = (over: Partial<PetWorld> = {}): PetWorld => ({
@@ -131,5 +131,14 @@ describe('petWorld', () => {
     const w = petWorld({ w: 300, h: 200 }, 190, [], []);
     expect(w.floor.top).toBeLessThanOrEqual(w.floor.bottom);
     expect(w.sofa).toBeNull();
+  });
+});
+
+describe('petDrawSize', () => {
+  it('draws small frames as they are, and shrinks big ones to PET_H tall', () => {
+    expect(petDrawSize(72, 78)).toEqual({ w: 72, h: 78, scaled: false });
+    expect(petDrawSize(PET_MAX, PET_MAX)).toEqual({ w: PET_MAX, h: PET_MAX, scaled: false });
+    expect(petDrawSize(192, 208)).toEqual({ w: 74, h: PET_H, scaled: true });
+    expect(petDrawSize(0, 0)).toEqual({ w: PET_H, h: PET_H, scaled: false });
   });
 });

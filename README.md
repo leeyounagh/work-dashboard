@@ -128,7 +128,7 @@ Claude 화면에서 마우스로 드래그해 선택하면 바로 클립보드�
 ### 사무실 펫 · 판넬
 
 - **펫:** `~/.work-dashboard/pets/<이름>.png` 에 [Petdex](https://petdex.dev) 형식 시트(8열 × 9행: 가만히, 오른쪽·왼쪽 달리기, 손 흔들기, 점프, 실망, 기다리기 …,
-  최대 4마리, 파일당 1 MB · 한 변 4096px 이하)를 넣으면 일하지 않는 펫이 사무실을 돌아다닙니다. 아무도 일하지 않으면 (소파가 있으면 소파에서) 늘어지고,
+  최대 4마리, 파일당 1 MB · 한 변 4096px 이하. 프레임이 112px 이하면 그 크기 그대로 선명하게, 더 크면 80px로 줄여 그립니다)를 넣으면 일하지 않는 펫이 사무실을 돌아다닙니다. 아무도 일하지 않으면 (소파가 있으면 소파에서) 늘어지고,
   연속 작업 🔥 중인 캐릭터를 구경하고, 입력을 오래 기다리는 「!」 캐릭터를 찌르러 가고, 판넬을 구경합니다. 클릭하면 손을 흔들며
   `<이름>.txt` 의 대사(한 줄에 하나, 최대 30줄 · 줄당 40자) 중 하나를 말합니다.
 - **판넬:** `~/.work-dashboard/decor/*.png` 의 그림(최대 8장, 파일당 512 KB 이하)이 바닥에 판넬로 섭니다. 「🎨 꾸미기」에서 가구처럼 끌어 옮길 수 있습니다.
@@ -277,7 +277,7 @@ computer; each new Claude session gets a random one no other session is using, a
 ### Office pets and standees
 
 - **Pets:** put a [Petdex](https://petdex.dev)-style sheet (8 columns × 9 rows: idle, run right, run left, wave, jump, sad, wait, …; up to 4 pets,
-  1 MB and 4096 px a side each) in `~/.work-dashboard/pets/<name>.png` and it ambles about the office doing no work. It lounges (on the sofa, if there is one)
+  1 MB and 4096 px a side each; frames up to 112 px tall are drawn as they are, crisp, and bigger ones are shrunk to 80 px) in `~/.work-dashboard/pets/<name>.png` and it ambles about the office doing no work. It lounges (on the sofa, if there is one)
   when nobody is working, watches whoever is on a 🔥 work streak, pokes a character left waiting on you, and looks at the standees. Click it and it waves
   and says one of the lines in `<name>.txt` (one per line, up to 30 lines of 40 characters).
 - **Standees:** pictures in `~/.work-dashboard/decor/*.png` (up to 8, 512 KB each) stand on the floor; drag them in 「🎨 꾸미기」 like the furniture.
