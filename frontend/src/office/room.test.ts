@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WALL_H } from './agentState';
-import { ITEM_SIZE, itemAt, layoutItems, type LayoutInput } from './furnitureLayout';
-import { DEFAULT_PREFS, THEMES, boxToSpot, parsePrefs, spotToBox, themeOf, withSpot, withTheme, withoutSpots } from './room';
+import { DECOR_MAX, ITEM_SIZE, decorSize, itemAt, layoutItems, type LayoutInput } from './furnitureLayout';
+import { DEFAULT_PREFS, THEMES, boxToSpot, decorIndex, itemName, parsePrefs, spotToBox, themeOf, withSpot, withTheme, withoutSpots } from './room';
 
 describe('room preferences', () => {
   it('falls back to the default for missing or broken storage', () => {
@@ -58,6 +58,7 @@ describe('furniture layout', () => {
     level: 0,
     spots: {},
     editing: false,
+    decor: [],
   };
   const ids = (i: LayoutInput) => layoutItems(i).map((b) => b.id);
 
@@ -106,5 +107,51 @@ describe('furniture layout', () => {
     expect(itemAt(boxes, plant.x + 5, plant.y + plant.h - 5)?.id).toBe('plantLeft');
     expect(itemAt(boxes, rug.x + 2, rug.y + rug.h - 2)?.id).toBe('rug');
     expect(itemAt(boxes, 2, 499)).toBeNull();
+  });
+});
+
+describe('standees', () => {
+  const base: LayoutInput = {
+    room: { w: 900, h: 500 },
+    wallH: WALL_H,
+    deskBottom: 200,
+    hasDesks: true,
+    level: 0,
+    spots: {},
+    editing: false,
+    decor: [],
+  };
+
+  it('draws small pictures at a whole multiple of their size (crisp), and shrinks big ones to fit', () => {
+    expect(decorSize(50, 115)).toEqual({ w: 50, h: 115 });
+    expect(decorSize(20, 40)).toEqual({ w: 60, h: 120 });
+    expect(decorSize(400, 200)).toEqual({ w: DECOR_MAX, h: 64 });
+    expect(decorSize(0, 0)).toEqual({ w: 0, h: 0 });
+  });
+
+  it('stands each loaded picture along the bottom of the floor, left of the guide, clear of the wall', () => {
+    const boxes = layoutItems({ ...base, decor: [{ w: 42, h: 96 }, { w: 0, h: 0 }, { w: 40, h: 80 }] });
+    const a = boxes.find((b) => b.id === 'decor0')!;
+    const c = boxes.find((b) => b.id === 'decor2')!;
+    expect(boxes.some((b) => b.id === 'decor1')).toBe(false); // still loading
+    expect(a.y + a.h).toBe(500 - 6);
+    expect(c.y + c.h).toBe(500 - 6);
+    expect(c.x).toBeLessThan(a.x);
+    expect(a.x + a.w).toBeLessThanOrEqual(900 - 96 + 42);
+    expect(a.y).toBeGreaterThan(WALL_H);
+  });
+
+  it('remembers where a standee was moved, and forgets unknown ones', () => {
+    const raw = JSON.stringify({ theme: 'wood', spots: { decor0: { fx: 0.2, fy: 0.9 }, decor99: { fx: 0.5, fy: 0.5 }, decorx: { fx: 0, fy: 0 } } });
+    expect(parsePrefs(raw).spots).toEqual({ decor0: { fx: 0.2, fy: 0.9 } });
+    const boxes = layoutItems({ ...base, decor: [{ w: 42, h: 96 }], spots: { decor0: { fx: 0.5, fy: 1 } } });
+    expect(boxes.find((b) => b.id === 'decor0')).toMatchObject({ x: 450 - 21, y: 500 - 96 });
+  });
+
+  it('names standees for the decorating overlay', () => {
+    expect(itemName('decor2')).toBe('판넬 3');
+    expect(itemName('sofa')).toBe('소파');
+    expect(decorIndex('decor5')).toBe(5);
+    expect(decorIndex('rug')).toBe(-1);
   });
 });

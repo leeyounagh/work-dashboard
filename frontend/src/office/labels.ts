@@ -27,11 +27,13 @@ export function drawProgress(ctx: CanvasRenderingContext2D, p: { fraction: numbe
   ctx.fillText(label, cx, bottom - 10);
 }
 
-export function drawBubble(ctx: CanvasRenderingContext2D, text: string, cx: number, bottom: number, alert: boolean): void {
+export function drawBubble(ctx: CanvasRenderingContext2D, text: string, cx: number, bottom: number, alert: boolean, max = 14): void {
   ctx.font = '10px "Cascadia Mono", Consolas, monospace';
-  const label = short(text, 14);
-  const w = Math.round(Math.min(ctx.measureText(label).width, 90) + 10);
-  const x = Math.round(cx - w / 2);
+  const label = short(text, max);
+  const w = Math.round(ctx.measureText(label).width + 10);
+  // Kept inside the canvas, the tail still under the speaker.
+  const right = ctx.canvas.clientWidth || ctx.canvas.width;
+  const x = Math.round(Math.min(Math.max(2, cx - w / 2), Math.max(2, right - w - 2)));
   const y = bottom - 16;
   ctx.fillStyle = alert ? BUBBLE_ALERT : BUBBLE;
   ctx.fillRect(x, y, w, 14);

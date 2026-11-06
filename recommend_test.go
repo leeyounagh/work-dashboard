@@ -62,7 +62,7 @@ func TestCustomSprites(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()
 	h.app.deps.CharactersDir = dir
-	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
+	png := testPNG
 	for name, data := range map[string][]byte{
 		"a.png":     png,
 		"b.PNG":     png,
@@ -93,7 +93,7 @@ func TestCustomSpritesCapKeepsGuide(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()
 	h.app.deps.CharactersDir = dir
-	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
+	png := testPNG
 	// More sheets than the cap, all sorting before guide.png.
 	for i := 0; i < maxSprites+10; i++ {
 		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%04d.png", i)), png, 0o600); err != nil {

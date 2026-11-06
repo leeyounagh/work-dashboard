@@ -144,6 +144,8 @@ function startOffice(
         useCustomSheets(sprites.characters ?? [], sprites.guide);
         office.reloadArt();
       }
+      // Pets (~/.work-dashboard/pets) and standees (~/.work-dashboard/decor).
+      office.setOfficeArt(sprites?.pets ?? [], sprites?.decor ?? []);
     })
     .catch(() => {});
   const off = EventsOn('agent:event', (ev: AgentEvent) => office.event(ev.termId, ev));

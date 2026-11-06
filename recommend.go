@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -163,23 +164,51 @@ const (
 var pngMagic = []byte("\x89PNG\r\n\x1a\n")
 
 // Sprites are the user's own sheets as data URLs: the Claude characters and,
-// from guide.png, the office guide ("" = the guide uses a character's sheet).
+// from guide.png, the office guide ("" = the guide uses a character's sheet),
+// plus the office pets and the cut-out standees (officeart.go).
 type Sprites struct {
-	Characters []string `json:"characters"`
-	Guide      string   `json:"guide"`
+	Characters []string    `json:"characters"`
+	Guide      string      `json:"guide"`
+	Pets       []PetSprite `json:"pets"`
+	Decor      []string    `json:"decor"`
 }
 
 const guideSprite = "guide.png"
 
-// CustomSprites returns the user's own character sheets.
+// CustomSprites returns the user's own character sheets, pets and standees.
 func (a *App) CustomSprites() Sprites {
-	out := Sprites{Characters: []string{}}
-	if a.unlocked() != nil || a.deps.CharactersDir == "" {
+	out := Sprites{Characters: []string{}, Pets: []PetSprite{}, Decor: []string{}}
+	if a.unlocked() != nil {
 		return out
 	}
-	entries, err := os.ReadDir(a.deps.CharactersDir)
+	out.Pets = loadPets(a.deps.PetsDir)
+	out.Decor = loadDecor(a.deps.DecorDir)
+	for _, name := range pngNames(a.deps.CharactersDir) {
+		isGuide := strings.EqualFold(name, guideSprite)
+		if len(out.Characters) == maxSprites && !isGuide {
+			continue // keep looking: guide.png may sort after the cap
+		}
+		url, ok := readPNG(filepath.Join(a.deps.CharactersDir, name), maxSpriteBytes)
+		if !ok {
+			continue
+		}
+		if isGuide {
+			out.Guide = url
+			continue
+		}
+		out.Characters = append(out.Characters, url)
+	}
+	return out
+}
+
+// pngNames lists the .png files in dir, sorted; none when dir is "" or unreadable.
+func pngNames(dir string) []string {
+	if dir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return out
+		return nil
 	}
 	names := []string{}
 	for _, e := range entries {
@@ -188,25 +217,31 @@ func (a *App) CustomSprites() Sprites {
 		}
 	}
 	sort.Strings(names)
-	for _, name := range names {
-		isGuide := strings.EqualFold(name, guideSprite)
-		if len(out.Characters) == maxSprites && !isGuide {
-			continue // keep looking: guide.png may sort after the cap
-		}
-		path := filepath.Join(a.deps.CharactersDir, name)
-		if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() || info.Size() > maxSpriteBytes {
-			continue // checked before reading: a huge file is never loaded
-		}
-		data, err := os.ReadFile(path)
-		if err != nil || len(data) > maxSpriteBytes || len(data) < len(pngMagic) || string(data[:len(pngMagic)]) != string(pngMagic) {
-			continue
-		}
-		url := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
-		if isGuide {
-			out.Guide = url
-			continue
-		}
-		out.Characters = append(out.Characters, url)
+	return names
+}
+
+// maxPNGSide caps a picture's width and height: a small file can declare a
+// huge image that would stall the window while it is decoded.
+const maxPNGSide = 4096
+
+// pngSizeOK reports whether data starts like a PNG whose header (IHDR) gives a
+// width and height of 1..maxPNGSide.
+func pngSizeOK(data []byte) bool {
+	if len(data) < 24 || string(data[:len(pngMagic)]) != string(pngMagic) || string(data[12:16]) != "IHDR" {
+		return false
 	}
-	return out
+	w, h := binary.BigEndian.Uint32(data[16:20]), binary.BigEndian.Uint32(data[20:24])
+	return w > 0 && h > 0 && w <= maxPNGSide && h <= maxPNGSide
+}
+
+// readPNG returns a regular PNG file of at most max bytes as a data URL.
+func readPNG(path string, max int64) (string, bool) {
+	if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() || info.Size() > max {
+		return "", false // checked before reading: a huge file is never loaded
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || int64(len(data)) > max || !pngSizeOK(data) {
+		return "", false
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(data), true
 }

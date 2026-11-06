@@ -43,9 +43,24 @@ export const ITEMS = {
   aquarium: { name: '수족관', level: 3 },
 } as const;
 
-export type ItemId = keyof typeof ITEMS;
+export type FurnitureId = keyof typeof ITEMS;
 
-export const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
+export const ITEM_IDS = Object.keys(ITEMS) as FurnitureId[];
+
+/** Cut-out standees: the user's own pictures (~/.work-dashboard/decor), always shown. */
+export const MAX_DECOR = 8; // maxDecor in officeart.go
+export type DecorId = `decor${number}`;
+export const decorId = (i: number): DecorId => `decor${i}`;
+export const DECOR_IDS: readonly DecorId[] = Array.from({ length: MAX_DECOR }, (_, i) => decorId(i));
+
+export type ItemId = FurnitureId | DecorId;
+
+export const isFurniture = (id: ItemId): id is FurnitureId => id in ITEMS;
+
+/** The standee's index (decor3 → 3), or -1 for furniture. */
+export const decorIndex = (id: ItemId): number => (isFurniture(id) ? -1 : Number(id.slice('decor'.length)));
+
+export const itemName = (id: ItemId): string => (isFurniture(id) ? ITEMS[id].name : `판넬 ${decorIndex(id) + 1}`);
 
 /** Where an item stands: its centre x and its bottom y, as fractions of the room. */
 export interface Spot {
@@ -84,7 +99,7 @@ export function parsePrefs(raw: string | null): RoomPrefs {
   const { theme, spots } = data as Record<string, unknown>;
   const out: Partial<Record<ItemId, Spot>> = {};
   if (spots && typeof spots === 'object') {
-    for (const id of ITEM_IDS) {
+    for (const id of [...ITEM_IDS, ...DECOR_IDS]) {
       const spot = parseSpot((spots as Record<string, unknown>)[id]);
       if (spot) out[id] = spot;
     }

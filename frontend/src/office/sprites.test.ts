@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME, bobHeight, directionFor, drawSize, frameRect, frameSize, hash, nextPose, pickSheet, poseRect } from './sprites';
+import { FRAME, bobHeight, directionFor, drawSize, frameRect, frameSize, nextPose, pickSheet, poseRect } from './sprites';
 
 describe('frameRect', () => {
   it('maps direction to column and frame to row on a 4×7 sheet of 16px frames', () => {
@@ -65,10 +65,20 @@ describe('directionFor', () => {
 
 describe('pickSheet', () => {
   const sheets = ['a', 'b', 'c'];
-  it('is stable per terminal and uses the dog for shells', () => {
-    expect(pickSheet('t1', 'claude', sheets, 'dog')).toBe(pickSheet('t1', 'claude', sheets, 'dog'));
-    expect(sheets).toContain(pickSheet('t7', 'claude', sheets, 'dog'));
-    expect(pickSheet('t1', 'shell', sheets, 'dog')).toBe('dog');
-    expect(hash('a')).not.toBe(hash('b'));
+  it('gives a new session a sheet no other session is using', () => {
+    expect(pickSheet('claude', sheets, 'dog', ['a', 'c'], () => 0.99)).toBe('b');
+    expect(pickSheet('claude', sheets, 'dog', ['b'], () => 0)).toBe('a');
+    expect(pickSheet('claude', sheets, 'dog', ['b'], () => 0.99)).toBe('c');
+  });
+
+  it('picks at random, so a restart does not bring the same line-up', () => {
+    expect(pickSheet('claude', sheets, 'dog', [], () => 0)).toBe('a');
+    expect(pickSheet('claude', sheets, 'dog', [], () => 0.5)).toBe('b');
+  });
+
+  it('reuses sheets once all are taken, and gives shells the dog', () => {
+    expect(sheets).toContain(pickSheet('claude', sheets, 'dog', sheets, () => 0.4));
+    expect(pickSheet('shell', sheets, 'dog', [])).toBe('dog');
+    expect(pickSheet('claude', [], 'dog', [])).toBe('dog');
   });
 });
