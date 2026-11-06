@@ -81,6 +81,55 @@ describe('stepPet', () => {
   });
 });
 
+describe('following the leader', () => {
+  const lead = { x: 300, y: 250, lounging: false, slot: 1 };
+
+  it('the first pet is followed now and then, a step behind and to the side', () => {
+    const p = planPet(pet, world({ leader: lead }), 0, always(0));
+    expect(p).toMatchObject({ act: 'follow', target: 'leader', tx: 256, ty: 244 });
+  });
+
+  it('gives each follower its own place in the row', () => {
+    const p = planPet(pet, world({ leader: { ...lead, slot: 2 } }), 0, always(0));
+    expect(p.tx).toBe(212);
+  });
+
+  it('takes the other side at a wall instead of standing on the leader', () => {
+    const p = planPet({ ...pet, x: 20, tx: 20 }, world({ leader: { ...lead, x: 30 } }), 0, always(0));
+    expect(p.tx).toBe(74);
+  });
+
+  it('curls up by the leader when it lounges, keeping by it while it walks to the sofa', () => {
+    const p = planPet(pet, world({ leader: { ...lead, lounging: true } }), 0, always(0));
+    expect(p).toMatchObject({ act: 'lounge', target: 'leader', tx: 256, ty: 244 });
+    const moved = stepPet({ ...p, until: 9999 }, world({ leader: { ...lead, x: 340, lounging: true } }), 0);
+    expect(moved.tx).toBe(296);
+    expect(petAnim({ ...moved, x: moved.tx, y: moved.ty })).toBe('wait');
+  });
+
+  it('still goes to poke a waiting character first', () => {
+    const p = planPet(pet, world({ leader: lead, waiting: [{ id: 't2', x: 60, y: 200 }] }), 0, always(0));
+    expect(p.act).toBe('poke');
+  });
+
+  it('keeps by the leader as it moves without hopping across, hurrying when far behind', () => {
+    const following = { ...pet, act: 'follow' as const, target: 'leader', tx: 256, ty: 244, until: 9999 };
+    const near = stepPet({ ...following, x: 230, y: 244 }, world({ leader: { ...lead, x: 280 } }), 0);
+    expect(near.tx).toBe(236);
+    expect(near.x).toBeCloseTo(230 + PET_SPEED);
+    // Level with the leader: it keeps the side it had.
+    const level = stepPet({ ...following, x: 300, y: 244 }, world({ leader: lead }), 0);
+    expect(level.tx).toBe(256);
+    const far = stepPet(following, world({ leader: lead }), 0);
+    expect(Math.hypot(far.x - 100, far.y - 200)).toBeCloseTo(PET_SPEED * 1.5);
+  });
+
+  it('stops following when there is no leader', () => {
+    const following = { ...pet, act: 'follow' as const, target: 'leader', until: 9999 };
+    expect(stepPet(following, world(), 0, always(0.99)).act).toBe('wander');
+  });
+});
+
 describe('clickPet', () => {
   it('stops to wave and says one of its lines', () => {
     const walking = { ...pet, tx: 300, ty: 250, until: 9999 };

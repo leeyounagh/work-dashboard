@@ -131,6 +131,7 @@ Claude 화면에서 마우스로 드래그해 선택하면 바로 클립보드�
   최대 4마리, 파일당 1 MB · 한 변 4096px 이하. 프레임이 112px 이하면 그 크기 그대로 선명하게, 더 크면 80px로 줄여 그립니다)를 넣으면 일하지 않는 펫이 사무실을 돌아다닙니다. 아무도 일하지 않으면 (소파가 있으면 소파에서) 늘어지고,
   연속 작업 🔥 중인 캐릭터를 구경하고, 입력을 오래 기다리는 「!」 캐릭터를 찌르러 가고, 판넬을 구경합니다. 클릭하면 손을 흔들며
   `<이름>.txt` 의 대사(한 줄에 하나, 최대 30줄 · 줄당 40자) 중 하나를 말합니다.
+  펫이 여러 마리면 파일 이름 순으로 첫 번째가 대장이 되고, 나머지는 가끔 대장을 따라다니다가 대장이 늘어지면 옆에 같이 웅크립니다 (예: `1-gintoki.png`, `2-gintoki-cat.png`).
 - **판넬:** `~/.work-dashboard/decor/*.png` 의 그림(최대 8장, 파일당 512 KB 이하)이 바닥에 판넬로 섭니다. 「🎨 꾸미기」에서 가구처럼 끌어 옮길 수 있습니다.
 - 둘 다 내 컴퓨터에만 있는 파일이라, 다시 배포할 수 없는 팬아트도 개인적으로 쓸 수 있습니다.
 
@@ -280,6 +281,7 @@ computer; each new Claude session gets a random one no other session is using, a
   1 MB and 4096 px a side each; frames up to 112 px tall are drawn as they are, crisp, and bigger ones are shrunk to 80 px) in `~/.work-dashboard/pets/<name>.png` and it ambles about the office doing no work. It lounges (on the sofa, if there is one)
   when nobody is working, watches whoever is on a 🔥 work streak, pokes a character left waiting on you, and looks at the standees. Click it and it waves
   and says one of the lines in `<name>.txt` (one per line, up to 30 lines of 40 characters).
+  With several pets, the first by file name leads; the others now and then follow it and curl up beside it when it lounges (e.g. `1-gintoki.png`, `2-gintoki-cat.png`).
 - **Standees:** pictures in `~/.work-dashboard/decor/*.png` (up to 8, 512 KB each) stand on the floor; drag them in 「🎨 꾸미기」 like the furniture.
 - Both stay on your computer, so fan art you may not redistribute is fine for your own use.
 

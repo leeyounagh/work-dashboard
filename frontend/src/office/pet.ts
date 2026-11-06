@@ -2,7 +2,9 @@
  * The office pet: the user's own Petdex-style sheet (~/.work-dashboard/pets)
  * that does no work. It ambles about the floor, lounges on the sofa when
  * nobody is working, watches whoever is on a work streak, pokes a character
- * left waiting on you, looks at the standees, and waves when clicked.
+ * left waiting on you, looks at the standees, and waves when clicked. With
+ * several pets, the others now and then follow the first (the leader) and
+ * curl up beside it when it lounges.
  *
  * Kept free of drawing so the behaviour can be tested.
  */
@@ -25,7 +27,7 @@ export const PET_ANIMS: Record<PetAnim, { row: number; frames: number }> = {
 };
 
 /** What the pet is up to: where it goes, and what it does once there. */
-export type PetAct = 'wander' | 'lounge' | 'watch' | 'poke' | 'look' | 'wave';
+export type PetAct = 'wander' | 'lounge' | 'watch' | 'poke' | 'look' | 'wave' | 'follow';
 
 export interface Pet {
   x: number; // feet
@@ -54,12 +56,21 @@ export interface PetWorld {
   streakers: Array<Point & { id: string }>; // characters on a work streak
   waiting: Array<Point & { id: string }>; // characters left waiting on you too long
   allIdle: boolean; // no session is working
+  /** The pet this one follows (the first one on screen), if it is not that one itself. */
+  leader?: (Point & { lounging: boolean; slot: number }) | null; // slot: 1 for the first follower, 2 …
 }
 
 export const PET_SPEED = 2.2; // px per frame (10 fps): a stroll
 export const WAVE_MS = 2500;
 export const LINE_MS = 3500;
 const NEAR = 28; // how far beside a character it stands
+/** The target of a pet that follows or curls up by the leader. */
+const LEADER = 'leader';
+/** How far apart a follower keeps from the leader (and from the follower before it), and how far behind. */
+const FOLLOW_GAP = 44;
+const FOLLOW_BEHIND = 6;
+/** Following a pet that got this far ahead, it hurries. */
+const CATCH_UP = 2 * FOLLOW_GAP;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
 
@@ -75,6 +86,18 @@ const inside = (w: PetWorld, p: Point): Point => ({
 /** Beside someone, on the side the pet comes from. */
 const beside = (pet: Pet, w: PetWorld, p: Point): Point => inside(w, { x: p.x + (pet.x < p.x ? -NEAR : NEAR), y: p.y });
 
+/** A follower's place by the leader: a row of slots on one side, the other side at a wall. */
+function followSpot(pet: Pet, w: PetWorld, lead: NonNullable<PetWorld['leader']>): Point {
+  const gap = FOLLOW_GAP * Math.max(1, lead.slot);
+  // Keep the side it chose unless it is clearly past the leader, so it does not hop across.
+  const kept: 1 | -1 = pet.tx < lead.x ? -1 : 1;
+  let side: 1 | -1 = pet.x < lead.x - 4 ? -1 : pet.x > lead.x + 4 ? 1 : kept;
+  const x = lead.x + side * gap;
+  if (x < w.floor.left || x > w.floor.right) side = side === 1 ? -1 : 1;
+  // A step behind (higher up), so the leader is drawn in front of it.
+  return inside(w, { x: lead.x + side * gap, y: lead.y - FOLLOW_BEHIND });
+}
+
 const pickOne = <T>(list: readonly T[], rnd: () => number): T => list[Math.min(list.length - 1, Math.floor(rnd() * list.length))];
 
 /** Something new to do. */
@@ -84,6 +107,9 @@ export function planPet(pet: Pet, w: PetWorld, now: number, rnd: () => number = 
     const c = pickOne(w.waiting, rnd);
     return go('poke', beside(pet, w, c), 9000, c.id);
   }
+  const lead = w.leader;
+  if (lead?.lounging && rnd() < 0.8) return go('lounge', followSpot(pet, w, lead), 15000, LEADER);
+  if (lead && rnd() < 0.45) return go('follow', followSpot(pet, w, lead), 8000 + rnd() * 4000, LEADER);
   if (w.allIdle && rnd() < 0.7) return go('lounge', w.sofa ? inside(w, w.sofa) : { x: pet.x, y: pet.y }, 15000);
   if (w.streakers.length && rnd() < 0.35) {
     const c = pickOne(w.streakers, rnd);
@@ -101,6 +127,7 @@ export function planPet(pet: Pet, w: PetWorld, now: number, rnd: () => number = 
 function targetGone(pet: Pet, w: PetWorld): boolean {
   if (pet.act === 'poke') return !w.waiting.some((c) => c.id === pet.target);
   if (pet.act === 'watch') return !w.streakers.some((c) => c.id === pet.target);
+  if (pet.act === 'follow') return !w.leader;
   return false;
 }
 
@@ -112,14 +139,20 @@ export function stepPet(pet: Pet, w: PetWorld, now: number, rnd: () => number = 
   let p: Pet = { ...pet, x: at.x, y: at.y, tx: goal.x, ty: goal.y };
   if (p.line !== null && now >= p.lineUntil) p = { ...p, line: null };
   if (now >= p.until || targetGone(p, w)) p = planPet(p, w, now, rnd);
+  // Following, or curling up by a leader still on its way to the sofa: keep by it as it moves.
+  if (p.target === LEADER && w.leader && (p.act === 'follow' || w.leader.lounging)) {
+    const to = followSpot(p, w, w.leader);
+    p = { ...p, tx: to.x, ty: to.y };
+  }
   const dx = p.tx - p.x;
   const dy = p.ty - p.y;
   const dist = Math.hypot(dx, dy);
-  if (dist <= PET_SPEED) return { ...p, x: p.tx, y: p.ty };
+  const speed = p.act === 'follow' && dist > CATCH_UP ? PET_SPEED * 1.5 : PET_SPEED;
+  if (dist <= speed) return { ...p, x: p.tx, y: p.ty };
   return {
     ...p,
-    x: p.x + (dx / dist) * PET_SPEED,
-    y: p.y + (dy / dist) * PET_SPEED,
+    x: p.x + (dx / dist) * speed,
+    y: p.y + (dy / dist) * speed,
     face: dx > 0.5 ? 1 : dx < -0.5 ? -1 : p.face,
   };
 }

@@ -63,10 +63,17 @@ export class PetCrew {
     });
   }
 
+  /** The first pet on screen leads; the others may follow it, each in its own slot. */
   update(w: PetWorld, now: number): void {
+    const shown = (m: Member) => m.img.complete && m.img.naturalWidth > 0;
+    const head = this.members.find(shown) ?? null;
+    let slot = 0;
     for (const m of this.members) {
       const start = m.pet ?? newPet({ x: w.floor.left + Math.random() * (w.floor.right - w.floor.left), y: w.floor.bottom }, now);
-      m.pet = stepPet(start, w, now);
+      // The leader moves first, so its followers see where it is this frame.
+      const lead = head && m !== head && shown(m) ? head.pet : null;
+      const leader = lead ? { x: lead.x, y: lead.y, lounging: lead.act === 'lounge', slot: ++slot } : null;
+      m.pet = stepPet(start, { ...w, leader }, now);
     }
   }
 
