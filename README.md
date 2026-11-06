@@ -123,7 +123,16 @@ Claude 화면에서 마우스로 드래그해 선택하면 바로 클립보드�
 사무실은 CC0 Ninja Adventure 캐릭터를 씁니다. 쓸 권리가 있는 다른 그림을 쓰려면
 `~/.work-dashboard/characters/*.png` 에 스프라이트 시트를 넣으세요 (아래/위/왼쪽/오른쪽 4열 × 7행의 정사각 프레임,
 0–3행 걷기, 4행 책상 작업 동작, 5–6행 쉴 때 랜덤으로 나오는 포즈 8개 — 16×16 이면 64×112, 프레임 크기는 자유, 파일당 512 KB 이하).
-파일은 내 컴퓨터에만 있고, 넣으면 Claude 캐릭터가 그중에서 랜덤으로 나옵니다. `guide.png` 는 사무실 가이드가 됩니다.
+파일은 내 컴퓨터에만 있고, 새 세션마다 다른 세션이 쓰지 않는 캐릭터가 랜덤으로 나옵니다. `guide.png` 는 사무실 가이드가 됩니다.
+
+### 사무실 펫 · 판넬
+
+- **펫:** `~/.work-dashboard/pets/<이름>.png` 에 [Petdex](https://petdex.dev) 형식 시트(8열 × 9행: 가만히, 오른쪽·왼쪽 달리기, 손 흔들기, 점프, 실망, 기다리기 …,
+  최대 4마리, 파일당 1 MB · 한 변 4096px 이하)를 넣으면 일하지 않는 펫이 사무실을 돌아다닙니다. 아무도 일하지 않으면 (소파가 있으면 소파에서) 늘어지고,
+  연속 작업 🔥 중인 캐릭터를 구경하고, 입력을 오래 기다리는 「!」 캐릭터를 찌르러 가고, 판넬을 구경합니다. 클릭하면 손을 흔들며
+  `<이름>.txt` 의 대사(한 줄에 하나, 최대 30줄 · 줄당 40자) 중 하나를 말합니다.
+- **판넬:** `~/.work-dashboard/decor/*.png` 의 그림(최대 8장, 파일당 512 KB 이하)이 바닥에 판넬로 섭니다. 「🎨 꾸미기」에서 가구처럼 끌어 옮길 수 있습니다.
+- 둘 다 내 컴퓨터에만 있는 파일이라, 다시 배포할 수 없는 팬아트도 개인적으로 쓸 수 있습니다.
 
 ### 개발
 
@@ -263,7 +272,16 @@ Set `WD_DATA_DIR=<absolute path>` to use another data folder (demos, screenshots
 The office uses the CC0 Ninja Adventure characters. To use other art you are allowed to use, put sprite sheets in
 `~/.work-dashboard/characters/*.png` (4 columns down/up/left/right × 7 rows of square frames, rows 0–3 walking,
 row 4 working at a desk, rows 5–6 up to 8 idle poses shown at random — 64×112 for 16×16 frames, any frame size works, up to 512 KB each). They stay on your
-computer; each Claude session gets one of them, and `guide.png` becomes the office guide.
+computer; each new Claude session gets a random one no other session is using, and `guide.png` becomes the office guide.
+
+### Office pets and standees
+
+- **Pets:** put a [Petdex](https://petdex.dev)-style sheet (8 columns × 9 rows: idle, run right, run left, wave, jump, sad, wait, …; up to 4 pets,
+  1 MB and 4096 px a side each) in `~/.work-dashboard/pets/<name>.png` and it ambles about the office doing no work. It lounges (on the sofa, if there is one)
+  when nobody is working, watches whoever is on a 🔥 work streak, pokes a character left waiting on you, and looks at the standees. Click it and it waves
+  and says one of the lines in `<name>.txt` (one per line, up to 30 lines of 40 characters).
+- **Standees:** pictures in `~/.work-dashboard/decor/*.png` (up to 8, 512 KB each) stand on the floor; drag them in 「🎨 꾸미기」 like the furniture.
+- Both stay on your computer, so fan art you may not redistribute is fine for your own use.
 
 ### Develop
 
