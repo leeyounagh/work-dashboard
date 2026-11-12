@@ -190,7 +190,12 @@ func ReadFile(g Guard, path string, max int64) (Content, error) {
 	return c, nil
 }
 
-// Diff returns `git diff` for one file against HEAD ("" when unchanged or untracked).
+// maxNewFileDiff caps how much of a new (untracked) file Diff shows.
+const maxNewFileDiff = 512 << 10 // 512 KiB
+
+// Diff returns `git diff` for one file against HEAD. A file git does not
+// track yet comes back as all added lines; "" means unchanged (or ignored,
+// or outside any repo).
 func Diff(g Guard, path string) (string, error) {
 	real, err := g.Resolve(path)
 	if err != nil {
@@ -198,18 +203,71 @@ func Diff(g Guard, path string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// --literal-pathspecs: "[ab].txt" is a file name, not a glob.
-	// --no-ext-diff/--no-textconv/core.fsmonitor=false: a repo's own config
-	// must not make a click on "변경 보기" run commands.
-	cmd := procutil.Background(exec.CommandContext(ctx, "git", "--literal-pathspecs", "-c", "core.fsmonitor=false",
-		"-C", filepath.Dir(real), "diff", "--no-color", "--no-ext-diff", "--no-textconv", "HEAD", "--", filepath.Base(real)))
+	name := filepath.Base(real)
+	out, err := git(ctx, real, "diff", "--no-color", "--no-ext-diff", "--no-textconv", "HEAD", "--", name)
+	if err != nil {
+		// A repo without commits has no HEAD: every file in it is new.
+		if _, headErr := git(ctx, real, "rev-parse", "--verify", "-q", "HEAD"); headErr == nil {
+			return "", err
+		}
+		status, statusErr := git(ctx, real, "status", "--porcelain", "--untracked-files=all", "--", name)
+		if statusErr != nil || status == "" {
+			return "", err
+		}
+		return newFileDiff(g, real)
+	}
+	if out != "" {
+		return out, nil
+	}
+	status, err := git(ctx, real, "status", "--porcelain", "--untracked-files=all", "--", name)
+	if err != nil || !strings.HasPrefix(status, "??") {
+		return "", err
+	}
+	return newFileDiff(g, real)
+}
+
+// git runs a read-only git command in the directory of file.
+// --literal-pathspecs: "[ab].txt" is a file name, not a glob.
+// --no-ext-diff/--no-textconv/core.fsmonitor=false: a repo's own config
+// must not make a click on "변경 보기" run commands.
+func git(ctx context.Context, file string, args ...string) (string, error) {
+	base := []string{"--literal-pathspecs", "-c", "core.fsmonitor=false", "-C", filepath.Dir(file)}
+	cmd := procutil.Background(exec.CommandContext(ctx, "git", append(base, args...)...))
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return "", fmt.Errorf("git diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
+			return "", fmt.Errorf("git %s: %s", args[0], strings.TrimSpace(string(exitErr.Stderr)))
 		}
-		return "", fmt.Errorf("git diff: %w", err)
+		return "", fmt.Errorf("git %s: %w", args[0], err)
 	}
 	return string(out), nil
+}
+
+// newFileDiff shows an untracked file the way git shows an added one.
+func newFileDiff(g Guard, path string) (string, error) {
+	c, err := ReadFile(g, path, maxNewFileDiff)
+	if err != nil {
+		return "", err
+	}
+	name := filepath.ToSlash(filepath.Base(path))
+	var b strings.Builder
+	fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file\n--- /dev/null\n+++ b/%s\n", name, name, name)
+	if c.Binary {
+		b.WriteString("Binary file added\n")
+		return b.String(), nil
+	}
+	text := strings.TrimSuffix(c.Text, "\n")
+	if text == "" {
+		return b.String(), nil
+	}
+	lines := strings.Split(text, "\n")
+	fmt.Fprintf(&b, "@@ -0,0 +1,%d @@\n", len(lines))
+	for _, l := range lines {
+		b.WriteString("+" + strings.TrimSuffix(l, "\r") + "\n")
+	}
+	if c.Truncated {
+		b.WriteString("\\ (too large: the rest is not shown)\n")
+	}
+	return b.String(), nil
 }

@@ -135,19 +135,30 @@ func TestDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 	git("init", "-q")
+	g := NewGuard([]string{root})
+	// No commits yet: there is no HEAD, and every file is new.
+	fresh, err := Diff(g, filepath.Join(root, "README.md"))
+	if err != nil || !strings.Contains(fresh, "+# hi") {
+		t.Fatalf("Diff before the first commit = %q, %v", fresh, err)
+	}
 	git("add", "README.md")
 	git("commit", "-q", "-m", "init")
 	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# changed\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	g := NewGuard([]string{root})
 	diff, err := Diff(g, filepath.Join(root, "README.md"))
 	if err != nil || !strings.Contains(diff, "+# changed") {
 		t.Fatalf("Diff = %q, %v", diff, err)
 	}
+	added, err := Diff(g, filepath.Join(root, "src", "main.go"))
+	if err != nil || !strings.Contains(added, "--- /dev/null") || !strings.Contains(added, "+package main") {
+		t.Fatalf("untracked file diff = %q, %v", added, err)
+	}
+	git("add", "src/main.go")
+	git("commit", "-q", "-m", "main")
 	clean, err := Diff(g, filepath.Join(root, "src", "main.go"))
 	if err != nil || clean != "" {
-		t.Fatalf("untracked file diff = %q, %v", clean, err)
+		t.Fatalf("unchanged file diff = %q, %v", clean, err)
 	}
 }
