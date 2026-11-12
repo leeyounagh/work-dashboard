@@ -2,7 +2,7 @@ import '@xterm/xterm/css/xterm.css';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 
-import { OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
+import { FileDiff, OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA, TermClose, TermResize, TermWrite } from '../../wailsjs/go/main/App';
 import { CanResolveFilePaths, ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
 import { carriesFiles, droppedPathsText } from './fileDrop';
 import { clipboardAction, osc52Text } from './clipboard';
@@ -12,6 +12,7 @@ import { base64ToBytes } from '../lib/workspaceDraft';
 import type { TabHost } from '../tabs/tabHost';
 import { EarlyEvents, type TermExit } from './earlyEvents';
 import { InterruptWatch } from './interrupt';
+import { ChangesPanel } from '../changes/changesPanel';
 
 export type TerminalKind = 'claude' | 'shell';
 
@@ -29,6 +30,7 @@ interface Session extends TerminalInfo {
   pane: HTMLElement;
   typedAt: number; // performance.now() of the last keystroke, 0 if none
   claudeSession?: string; // Claude session ID; keeps the tab's place across restarts
+  changes?: ChangesPanel; // Claude tabs: the files the session changed, on the right
 }
 
 interface WailsRuntime {
@@ -81,6 +83,8 @@ export class TerminalPanel {
     private readonly tabs: TabHost,
     private readonly body: HTMLElement,
     private readonly onError: (message: string) => void,
+    /** Opens a file in the viewer (from the changed-files list). */
+    private readonly openFile: (path: string) => void = () => {},
   ) {
     this.unsubscribe = [
       EventsOn('term:data', (ev: TermData) => this.handleData(ev)),
@@ -244,12 +248,26 @@ export class TerminalPanel {
     pane.style.visibility = 'hidden';
     pane.classList.add('tab-pane', 'active');
     this.body.append(pane);
+    // Claude tabs: terminal on the left, the files it changed on the right.
+    let host = pane;
+    let changes: ChangesPanel | undefined;
+    if (kind === 'claude') {
+      pane.classList.add('with-changes');
+      host = document.createElement('div');
+      host.className = 'term-host';
+      changes = new ChangesPanel({
+        loadDiff: (path) => FileDiff(path),
+        openFile: (path) => this.openFile(path),
+        onLayout: () => this.fitActive(),
+      });
+      pane.append(host, changes.el);
+    }
     let term: Terminal | undefined;
     let session: Session;
     let dir: string;
     try {
       const opened = openTerminal(
-        pane,
+        host,
         {
           theme: THEME,
           fontFamily: "'Cascadia Mono', Consolas, monospace",
@@ -266,10 +284,11 @@ export class TerminalPanel {
       fit.fit();
 
       const info = await launch(term.cols, term.rows);
-      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane, typedAt: 0, claudeSession: info.session };
+      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane, typedAt: 0, claudeSession: info.session, changes };
       dir = info.dir;
     } catch (err) {
       term?.dispose();
+      changes?.dispose();
       pane.remove();
       this.onError(String(err));
       return;
@@ -362,6 +381,16 @@ export class TerminalPanel {
     });
   }
 
+  /** Claude wrote a file in this terminal's session. */
+  fileChanged(id: string, path: string, tool: string): void {
+    this.sessions.get(id)?.changes?.touched(path, tool);
+  }
+
+  /** Claude finished a reply: diffs may have changed outside its edits (formatters). */
+  replyDone(id: string): void {
+    this.sessions.get(id)?.changes?.refreshAll();
+  }
+
   private handleData(ev: TermData) {
     const bytes = base64ToBytes(ev.data);
     const session = this.sessions.get(ev.id);
@@ -416,6 +445,7 @@ export class TerminalPanel {
       }
     }
     s.term.dispose();
+    s.changes?.dispose();
     this.tabs.remove(id);
     this.changed();
   }
@@ -425,7 +455,10 @@ export class TerminalPanel {
     for (const off of this.unsubscribe) off();
     this.resizeObserver.disconnect();
     this.dropListeners.abort();
-    for (const s of this.sessions.values()) s.term.dispose();
+    for (const s of this.sessions.values()) {
+      s.term.dispose();
+      s.changes?.dispose();
+    }
     this.sessions.clear();
   }
 }

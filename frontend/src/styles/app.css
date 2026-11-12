@@ -163,6 +163,50 @@ textarea.field { resize: vertical; }
 .tab-pane { position: absolute; inset: 0; display: none; }
 .tab-pane.active { display: block; }
 .term-pane { inset: 4px 0 0 8px; }
+/* Claude tabs: terminal left, the files the session changed right */
+.term-pane.with-changes.active { display: flex; }
+.term-host { flex: 1; min-width: 0; height: 100%; }
+.changes {
+  /* The terminal pane undoes the UI zoom; the list follows it like the rest of the UI. */
+  zoom: var(--ui-zoom, 1);
+  flex: 0 0 42%;
+  min-width: 260px;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  font-family: var(--font);
+  font-size: 12px;
+}
+.changes.collapsed { flex: 0 0 auto; min-width: 0; }
+.changes.collapsed .changes-head { writing-mode: vertical-rl; padding: 6px 2px; }
+.changes-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.changes-title { font-weight: 600; }
+.changes-stats { display: flex; gap: 4px; }
+.changes-reload { margin-left: auto; }
+.changes-toggle, .changes-reload, .change-caret { padding: 0 4px; }
+.changes-list { flex: 1; min-height: 0; overflow: auto; }
+.change-file { border-bottom: 1px solid var(--border); }
+.change-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; white-space: nowrap; }
+.change-name { padding: 0; font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.change-name:hover { text-decoration: underline; }
+.change-dir { flex: 1; min-width: 0; color: var(--text-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.badge-new { color: var(--ok); }
+.diff-add { color: var(--ok); }
+.diff-del { color: var(--danger); }
+.change-note { margin: 0; padding: 4px 10px 8px; }
+.change-diff { font-family: var(--font-mono); font-size: 12px; line-height: 1.45; overflow-x: auto; background: var(--bg); padding-bottom: 4px; }
+.diff-line { display: flex; min-width: max-content; white-space: pre; }
+.diff-line.diff-add { background: rgba(115, 201, 145, 0.12); color: var(--text); }
+.diff-line.diff-del { background: rgba(242, 119, 122, 0.12); color: var(--text); }
+.diff-line.diff-hunk { color: var(--text-muted); background: var(--panel-raised); padding: 1px 8px; }
+.diff-line.diff-note { color: var(--text-muted); padding: 0 8px; font-style: italic; }
+.diff-no { flex: 0 0 3.5em; text-align: right; padding-right: 6px; color: #5c6370; user-select: none; }
+.diff-sign { flex: 0 0 1.2em; text-align: center; user-select: none; }
+.diff-add .diff-sign { color: var(--ok); }
+.diff-del .diff-sign { color: var(--danger); }
+.diff-text { padding-right: 12px; }
 .editor-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .hidden { display: none !important; }
 

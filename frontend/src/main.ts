@@ -44,6 +44,7 @@ function saveWorkspaceOrder(ids: string[]) {
 import { BrowserOpenURL, EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
+import { isEditTool } from './changes/changeState';
 import { Office } from './office/office';
 import { connectOfficeFeeds } from './office/feeds';
 import { quizPrompt } from './office/quiz';
@@ -417,10 +418,10 @@ async function start() {
   const editorBody = byId('editor-body');
   const emptyNote = byId('editor-empty');
   const tabs = new TabHost(byId('editor-tabs'), editorBody, (active) => emptyNote.classList.toggle('hidden', active !== null), localTabOrder);
-  const panel = new TerminalPanel(tabs, editorBody, toast);
+  const viewer = new FileViewer(tabs, toast);
+  const panel = new TerminalPanel(tabs, editorBody, toast, (path) => void viewer.open(path, true, selection.workspace?.id));
   const office = startOffice(panel, tabs, () => selection.workspace);
   import.meta.hot?.dispose(() => office?.stop());
-  const viewer = new FileViewer(tabs, toast);
   import.meta.hot?.dispose(() => {
     panel.dispose();
     viewer.dispose();
@@ -436,11 +437,19 @@ async function start() {
     ev.paths.forEach((p, i) => void viewer.open(p, inView && i === 0, ev.workspaceId));
   });
   const offSeen = EventsOn('files:seen', (ev: FilesEvent) => {
-    for (const p of ev.paths) tree.seen(ev.workspaceId, p, ev.tool ?? '');
+    for (const p of ev.paths) {
+      tree.seen(ev.workspaceId, p, ev.tool ?? '');
+      // Edits also go on the right side of the Claude terminal that made them.
+      if (isEditTool(ev.tool)) panel.fileChanged(ev.termId, p, ev.tool ?? '');
+    }
+  });
+  const offStop = EventsOn('agent:event', (ev: AgentEvent) => {
+    if (ev.event === 'Stop') panel.replyDone(ev.termId);
   });
   import.meta.hot?.dispose(() => {
     offOpen();
     offSeen();
+    offStop();
   });
 
   const updateButtons = wireTerminalButtons(panel, () => selection);
