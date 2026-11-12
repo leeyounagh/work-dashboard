@@ -6,6 +6,7 @@ import { FileDiff, OpenClaude, OpenShell, RenameTerminal, ResumeClaude, StartQA,
 import { CanResolveFilePaths, ClipboardGetText, ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
 import { carriesFiles, droppedPathsText } from './fileDrop';
 import { clipboardAction, osc52Text } from './clipboard';
+import { isShiftEnter, NEWLINE_SEQUENCE } from './newline';
 import { openTerminal } from './openTerminal';
 import { isMac } from '../lib/platform';
 import { base64ToBytes } from '../lib/workspaceDraft';
@@ -359,6 +360,14 @@ export class TerminalPanel {
         .catch((err) => this.onError(`붙여넣지 못했습니다: ${String(err)}`));
     };
     term.attachCustomKeyEventHandler((e) => {
+      // Claude: Shift+Enter adds a line (as in VS Code/Cursor) instead of
+      // submitting. Shells keep xterm's CR: ESC would clear a PowerShell line.
+      if (session.kind === 'claude' && isShiftEnter(e)) {
+        e.preventDefault();
+        // xterm sees keydown, keypress and keyup; send once, swallow all three.
+        if (e.type === 'keydown') term.input(NEWLINE_SEQUENCE);
+        return false;
+      }
       const action = clipboardAction(e, term.hasSelection(), isMac());
       if (!action) return true;
       // Stop the browser's own paste event too, or the text would arrive twice.

@@ -57,9 +57,9 @@ func TestSearch(t *testing.T) {
 
 func TestSearchStopsOnTimeout(t *testing.T) {
 	root, _ := setup(t)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	// Already past its deadline: a 1ns timer can fire late on Windows (~15ms ticks).
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
-	time.Sleep(time.Millisecond)
 	res, err := Search(ctx, NewGuard([]string{root}), []string{root}, "a", 50)
 	if err != nil || !res.Truncated {
 		t.Fatalf("res = %+v, err = %v; a timeout returns what was found so far", res, err)
