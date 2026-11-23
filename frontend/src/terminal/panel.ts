@@ -14,6 +14,7 @@ import type { TabHost } from '../tabs/tabHost';
 import { EarlyEvents, type TermExit } from './earlyEvents';
 import { InterruptWatch } from './interrupt';
 import { ChangesPanel } from '../changes/changesPanel';
+import { CHANGES_OFF_CLASS, loadChangesHidden, saveChangesHidden } from '../changes/changesVisibility';
 
 export type TerminalKind = 'claude' | 'shell';
 
@@ -32,6 +33,7 @@ interface Session extends TerminalInfo {
   typedAt: number; // performance.now() of the last keystroke, 0 if none
   claudeSession?: string; // Claude session ID; keeps the tab's place across restarts
   changes?: ChangesPanel; // Claude tabs: the files the session changed, on the right
+  host: HTMLElement; // the terminal's own box (narrower than pane when changes show)
 }
 
 interface WailsRuntime {
@@ -72,6 +74,8 @@ export class TerminalPanel {
   private readonly interrupts = new InterruptWatch();
   private fontScale = 1;
   private readonly interruptListeners = new Set<(id: string) => void>();
+  private changesHidden = loadChangesHidden();
+  private readonly changesListeners = new Set<(hidden: boolean) => void>();
 
   // Late events for tabs the user already closed are dropped, not buffered.
   private readonly closed = new Set<string>();
@@ -94,7 +98,28 @@ export class TerminalPanel {
     ];
     this.resizeObserver = new ResizeObserver(() => this.fitActive());
     this.resizeObserver.observe(body);
+    this.body.classList.toggle(CHANGES_OFF_CLASS, this.changesHidden);
     this.wireFileDrop();
+  }
+
+  /** Whether the changed-files panel is off in every Claude tab. */
+  get changesOff(): boolean {
+    return this.changesHidden;
+  }
+
+  /** Turns the changed-files panel off or on for every Claude tab; remembered. */
+  setChangesHidden(hidden: boolean): void {
+    if (hidden === this.changesHidden) return;
+    this.changesHidden = hidden;
+    saveChangesHidden(hidden);
+    this.body.classList.toggle(CHANGES_OFF_CLASS, hidden);
+    this.fitActive(); // the terminal takes (or gives back) the width
+    for (const l of this.changesListeners) l(hidden);
+  }
+
+  onChangesHidden(listener: (hidden: boolean) => void): () => void {
+    this.changesListeners.add(listener);
+    return () => this.changesListeners.delete(listener);
   }
 
   /**
@@ -260,8 +285,11 @@ export class TerminalPanel {
         loadDiff: (path) => FileDiff(path),
         openFile: (path) => this.openFile(path),
         onLayout: () => this.fitActive(),
+        onHide: () => this.setChangesHidden(true),
       });
       pane.append(host, changes.el);
+      // The changes panel can grow or shrink without the body resizing.
+      this.resizeObserver.observe(host);
     }
     let term: Terminal | undefined;
     let session: Session;
@@ -285,11 +313,12 @@ export class TerminalPanel {
       fit.fit();
 
       const info = await launch(term.cols, term.rows);
-      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane, typedAt: 0, claudeSession: info.session, changes };
+      session = { id: info.id, title: info.title, kind, workspaceId, alive: true, term, fit, pane, typedAt: 0, claudeSession: info.session, changes, host };
       dir = info.dir;
     } catch (err) {
       term?.dispose();
       changes?.dispose();
+      this.resizeObserver.unobserve(host);
       pane.remove();
       this.onError(String(err));
       return;
@@ -455,6 +484,7 @@ export class TerminalPanel {
     }
     s.term.dispose();
     s.changes?.dispose();
+    this.resizeObserver.unobserve(s.host);
     this.tabs.remove(id);
     this.changed();
   }

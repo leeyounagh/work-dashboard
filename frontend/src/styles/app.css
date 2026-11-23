@@ -184,8 +184,12 @@ textarea.field { resize: vertical; }
 .changes-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
 .changes-title { font-weight: 600; }
 .changes-stats { display: flex; gap: 4px; }
-.changes-reload { margin-left: auto; }
-.changes-toggle, .changes-reload, .change-caret { padding: 0 4px; }
+.changes-reload, .changes-hide { margin-left: auto; }
+.changes-reload ~ .changes-hide { margin-left: 0; }
+.changes-toggle, .changes-reload, .changes-hide, .change-caret { padding: 0 4px; }
+/* Turned off from the toolbar or the panel's ×: the terminal takes the whole width. */
+.term-body.changes-off .changes { display: none; }
+.changes-switch:not(.active) { color: var(--text-muted); }
 .changes-list { flex: 1; min-height: 0; overflow: auto; }
 .change-file { border-bottom: 1px solid var(--border); }
 .change-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; white-space: nowrap; }

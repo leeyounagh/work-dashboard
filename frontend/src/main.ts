@@ -45,6 +45,7 @@ import { BrowserOpenURL, EventsOn } from '../wailsjs/runtime/runtime';
 import { FileTree } from './files/tree';
 import { FileViewer } from './files/viewer';
 import { isEditTool } from './changes/changeState';
+import { paintChangesButton } from './changes/changesVisibility';
 import { Office } from './office/office';
 import { connectOfficeFeeds } from './office/feeds';
 import { quizPrompt } from './office/quiz';
@@ -385,6 +386,13 @@ function wireTerminalButtons(panel: TerminalPanel, getSelection: () => Selection
   return update;
 }
 
+/** The toolbar's 「바뀐 파일」 button turns the changed-files panel on and off. */
+function wireChangesSwitch(panel: TerminalPanel, button: HTMLButtonElement): () => void {
+  paintChangesButton(button, panel.changesOff);
+  button.addEventListener('click', () => panel.setChangesHidden(!panel.changesOff));
+  return panel.onChangesHidden((hidden) => paintChangesButton(button, hidden));
+}
+
 /**
  * Reopens Claude sessions that were running when the app last exited, for
  * workspaces whose session-restore widget allows it.
@@ -420,6 +428,7 @@ async function start() {
   const tabs = new TabHost(byId('editor-tabs'), editorBody, (active) => emptyNote.classList.toggle('hidden', active !== null), localTabOrder);
   const viewer = new FileViewer(tabs, toast);
   const panel = new TerminalPanel(tabs, editorBody, toast, (path) => void viewer.open(path, true, selection.workspace?.id));
+  import.meta.hot?.dispose(wireChangesSwitch(panel, byId<HTMLButtonElement>('changes-switch')));
   const office = startOffice(panel, tabs, () => selection.workspace);
   import.meta.hot?.dispose(() => office?.stop());
   import.meta.hot?.dispose(() => {
