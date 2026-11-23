@@ -285,6 +285,7 @@ export namespace main {
 	export class PetSprite {
 	    sheet: string;
 	    lines: string[];
+	    name: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PetSprite(source);
@@ -294,6 +295,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sheet = source["sheet"];
 	        this.lines = source["lines"];
+	        this.name = source["name"];
 	    }
 	}
 	export class Recommendation {

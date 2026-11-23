@@ -35,11 +35,12 @@ func TestCustomSpritesPetsAndDecor(t *testing.T) {
 	h.app.deps.DecorDir = decor
 	long := strings.Repeat("가", maxLineRunes+5)
 	writeFiles(t, pets, map[string][]byte{
-		"gintoki.png": testPNG,
-		"gintoki.txt": []byte("\xef\xbb\xbf당분이 부족해…\r\n\n  월요일은 점프  \nbell\a\there\u200bx\n" + long + "\n"),
-		"quiet.png":   testPNG,
-		"fake.png":    []byte("not a png"),
-		"huge.png":    append(append([]byte{}, testPNG...), make([]byte, maxPetBytes)...),
+		"gintoki.png":  testPNG,
+		"gintoki.txt":  []byte("\xef\xbb\xbf당분이 부족해…\r\n\n  월요일은 점프  \nbell\a\there\u200bx\n" + long + "\n"),
+		"gintoki.name": []byte("\xef\xbb\xbf  긴토키 \r\n두 번째 줄은 무시\n"),
+		"quiet.png":    testPNG,
+		"fake.png":     []byte("not a png"),
+		"huge.png":     append(append([]byte{}, testPNG...), make([]byte, maxPetBytes)...),
 	})
 	writeFiles(t, decor, map[string][]byte{
 		"standee.png": testPNG,
@@ -55,9 +56,16 @@ func TestCustomSpritesPetsAndDecor(t *testing.T) {
 	if fmt.Sprint(got.Pets[0].Lines) != fmt.Sprint(want) {
 		t.Fatalf("lines = %q, want %q", got.Pets[0].Lines, want)
 	}
+	if got.Pets[0].Name != "긴토키" {
+		t.Fatalf("name = %q, want the first line of gintoki.name", got.Pets[0].Name)
+	}
 	// No .txt: no lines, but still a pet.
 	if got.Pets[1].Lines == nil || len(got.Pets[1].Lines) != 0 {
 		t.Fatalf("quiet pet lines = %#v", got.Pets[1].Lines)
+	}
+	// No .name: no name tag.
+	if got.Pets[1].Name != "" {
+		t.Fatalf("quiet pet name = %q", got.Pets[1].Name)
 	}
 	if len(got.Decor) != 1 || !strings.HasPrefix(got.Decor[0], "data:image/png;base64,") {
 		t.Fatalf("decor = %d", len(got.Decor))
@@ -129,5 +137,17 @@ func TestCustomSpritesSkipsHugeImages(t *testing.T) {
 	writeFiles(t, dir, map[string][]byte{"a.png": pngOf(16000, 16000), "b.png": testPNG})
 	if got := h.app.CustomSprites(); len(got.Decor) != 1 {
 		t.Fatalf("decor = %d, want only the small one", len(got.Decor))
+	}
+}
+
+func TestPetNameIsCut(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string][]byte{
+		"fox.png":  testPNG,
+		"fox.name": []byte(strings.Repeat("나", maxPetNameRunes+3)),
+	})
+	got := loadPets(dir)
+	if len(got) != 1 || got[0].Name != strings.Repeat("나", maxPetNameRunes) {
+		t.Fatalf("pets = %+v", got)
 	}
 }

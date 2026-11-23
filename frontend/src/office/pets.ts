@@ -1,6 +1,7 @@
 /** The office pets on screen: their sheets, what they say, drawing and clicks (behaviour in pet.ts). */
 import type { Box } from './furnitureLayout';
-import { drawBubble } from './labels';
+import { FONT } from './decor';
+import { drawBubble, short } from './labels';
 import { PET_COLS, PET_ROWS, clickPet, newPet, petAnim, petFrame, stepPet, type Pet, type PetWorld } from './pet';
 import { decorIndex } from './room';
 
@@ -16,15 +17,34 @@ export function petDrawSize(fw: number, fh: number): { w: number; h: number; sca
   return { w: Math.round((fw * PET_H) / fh), h: PET_H, scaled: true };
 }
 const BUBBLE_MAX = 22;
+/** Characters of a pet's name tag (the backend cuts names to 12 too). */
+const NAME_MAX = 12;
+
+/** A pet's name on a small dark tag just under its feet, so it never covers a speech bubble. */
+export function drawPetName(ctx: CanvasRenderingContext2D, name: string, cx: number, feet: number): void {
+  const text = short(name.trim(), NAME_MAX);
+  if (!text) return;
+  ctx.font = `bold 10px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  const w = Math.ceil(ctx.measureText(text).width) + 8;
+  const top = Math.round(feet) + 3;
+  ctx.fillStyle = 'rgba(20,21,24,0.75)';
+  ctx.fillRect(Math.round(cx - w / 2), top, w, 13);
+  ctx.fillStyle = '#ffe8b0';
+  ctx.fillText(text, Math.round(cx), top + 10);
+}
 
 export interface PetArt {
   sheet: string; // data URL of a Petdex-style sheet
   lines: string[];
+  name?: string; // shown under the pet; "" or missing for none
 }
 
 interface Member {
   img: HTMLImageElement;
   lines: readonly string[];
+  name: string;
   pet: Pet | null; // placed once the room is known
 }
 
@@ -59,7 +79,7 @@ export class PetCrew {
     this.members = art.map((a) => {
       const img = new Image();
       img.src = a.sheet;
-      return { img, lines: a.lines, pet: null };
+      return { img, lines: a.lines, name: a.name ?? '', pet: null };
     });
   }
 
@@ -125,6 +145,7 @@ export class PetCrew {
     ctx.imageSmoothingEnabled = scaled;
     ctx.drawImage(m.img, col * fw, row * fh, fw, fh, x, y, w, h);
     ctx.imageSmoothingEnabled = false;
+    if (m.name) drawPetName(ctx, m.name, p.x, p.y);
     if (p.line) drawBubble(ctx, p.line, p.x, y + 6, false, BUBBLE_MAX);
   }
 }
