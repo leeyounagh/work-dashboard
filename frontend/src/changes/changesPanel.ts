@@ -16,6 +16,8 @@ export interface ChangesPanelDeps {
   openFile: (path: string) => void;
   /** Called after the panel appears, collapses or expands (the terminal refits). */
   onLayout: () => void;
+  /** Turns the panel off for every Claude tab (the × in its header). */
+  onHide?: () => void;
 }
 
 function loadCollapsed(): boolean {
@@ -88,11 +90,10 @@ export class ChangesPanel {
       for (const k of [...this.open]) if (!this.pinned.has(k)) this.open.delete(k);
       this.open.add(key);
     }
-    if (first) {
-      this.el.classList.remove('hidden');
-      this.deps.onLayout();
-    }
+    if (first) this.el.classList.remove('hidden');
     this.schedule(path);
+    // The panel's width follows its contents: draw them before the terminal measures.
+    if (first) this.relayout();
   }
 
   /** Reloads every diff, e.g. when Claude stops (a formatter may have run). */
@@ -144,6 +145,12 @@ export class ChangesPanel {
     this.collapsed = !this.collapsed;
     saveCollapsed(this.collapsed);
     this.applyCollapsed();
+    this.relayout();
+  }
+
+  /** Draws now (not on the next microtask), then lets the terminal refit to what is left. */
+  private relayout() {
+    this.draw();
     this.deps.onLayout();
   }
 
@@ -193,6 +200,15 @@ export class ChangesPanel {
       reload.title = '모두 다시 불러오기';
       reload.addEventListener('click', () => this.refreshAll());
       children.push(reload);
+    }
+    if (this.deps.onHide) {
+      const onHide = this.deps.onHide;
+      const hide = node('button', 'icon changes-hide', '×');
+      hide.type = 'button';
+      hide.title = '바뀐 파일 패널 끄기 (위쪽 「바뀐 파일」 버튼으로 다시 켭니다)';
+      hide.setAttribute('aria-label', '바뀐 파일 패널 끄기');
+      hide.addEventListener('click', () => onHide());
+      children.push(hide);
     }
     this.header.replaceChildren(...children);
     // Re-rendering must not jump the list back to the top while reading.

@@ -39,6 +39,39 @@ describe('ChangesPanel', () => {
     expect(panel.el.querySelectorAll('.change-diff .diff-del')).toHaveLength(1);
   });
 
+  it('offers an × that turns the panel off only when the host supports it', async () => {
+    const onHide = vi.fn();
+    const panel = new ChangesPanel({ loadDiff: vi.fn(async () => DIFF), openFile: vi.fn(), onLayout: vi.fn(), onHide });
+    document.body.append(panel.el);
+    panel.touched('C:\w\a.ts', 'Edit');
+    await settle();
+    panel.el.querySelector<HTMLButtonElement>('.changes-hide')?.click();
+    expect(onHide).toHaveBeenCalledTimes(1);
+
+    const { panel: plain } = setup();
+    plain.touched('C:\w\a.ts', 'Edit');
+    await settle();
+    expect(plain.el.querySelector('.changes-hide')).toBeNull();
+  });
+
+  it('empties the list before the terminal refits when collapsing', async () => {
+    let filesAtLayout = -1;
+    const panel = new ChangesPanel({
+      loadDiff: vi.fn(async () => DIFF),
+      openFile: vi.fn(),
+      onLayout: () => {
+        filesAtLayout = panel.el.querySelectorAll('.change-file').length;
+      },
+    });
+    document.body.append(panel.el);
+    panel.touched('C:\w\a.ts', 'Edit');
+    await settle();
+    panel.el.querySelector<HTMLButtonElement>('.changes-toggle')?.click();
+    // A collapsed panel is as wide as its contents: measuring with the old diffs left the terminal narrow.
+    expect(panel.el.classList.contains('collapsed')).toBe(true);
+    expect(filesAtLayout).toBe(0);
+  });
+
   it('loads one diff for a burst of edits to the same file', async () => {
     const { panel, loadDiff } = setup();
     panel.touched('C:\\w\\a.ts', 'Edit');
