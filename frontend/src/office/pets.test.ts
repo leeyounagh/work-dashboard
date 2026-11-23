@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Pet, PetWorld } from './pet';
-import { PetCrew } from './pets';
+import { PetCrew, drawPetName } from './pets';
 
 const world: PetWorld = { floor: { left: 20, right: 380, top: 150, bottom: 280 }, sofa: null, standees: [], streakers: [], waiting: [], allIdle: true };
 type Inner = { members: Array<{ img: HTMLImageElement; pet: Pet | null }> };
@@ -45,5 +45,28 @@ describe('PetCrew', () => {
     expect(hidden.target).toBeNull();
     expect(lead.target).toBeNull();
     expect(cat.target).toBe('leader');
+  });
+});
+
+describe('drawPetName', () => {
+  function fakeCtx() {
+    return { font: '', textAlign: '', textBaseline: '', fillStyle: '', measureText: (t: string) => ({ width: t.length * 6 }), fillRect: vi.fn(), fillText: vi.fn() };
+  }
+
+  it('writes the name centred just under the feet', () => {
+    const ctx = fakeCtx();
+    drawPetName(ctx as unknown as CanvasRenderingContext2D, '나경', 100, 200);
+    expect(ctx.fillText).toHaveBeenCalledWith('나경', 100, 213);
+    const [x, y, w] = ctx.fillRect.mock.calls[0];
+    expect(y).toBeGreaterThan(200); // below the feet, clear of the speech bubble above
+    expect(x + w / 2).toBe(100);
+  });
+
+  it('draws nothing for a blank name and cuts a long one', () => {
+    const ctx = fakeCtx();
+    drawPetName(ctx as unknown as CanvasRenderingContext2D, '   ', 0, 0);
+    expect(ctx.fillText).not.toHaveBeenCalled();
+    drawPetName(ctx as unknown as CanvasRenderingContext2D, '가'.repeat(20), 0, 0);
+    expect(ctx.fillText.mock.calls[0][0]).toBe(`${'가'.repeat(11)}…`);
   });
 });

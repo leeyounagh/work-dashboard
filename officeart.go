@@ -13,7 +13,8 @@ import (
 // A pet is a Petdex-style sheet (8 columns × 9 rows of equal frames: idle,
 // run right, run left, wave, jump, sad, wait, run, review) in
 // ~/.work-dashboard/pets/<name>.png, with optional lines it says when
-// clicked in <name>.txt, one per line. A standee is any picture in
+// clicked in <name>.txt, one per line, and an optional name shown under it
+// in <name>.name (the first line). A standee is any picture in
 // ~/.work-dashboard/decor/*.png.
 const (
 	maxPetBytes   = 1 << 20
@@ -23,12 +24,28 @@ const (
 	maxLinesBytes = 4 << 10
 	maxPetLines   = 30
 	maxLineRunes  = 40
+	// maxPetNameRunes keeps a pet's name tag about as wide as the pet.
+	maxPetNameRunes = 12
 )
 
-// PetSprite is one pet's sheet (a data URL) and what it may say.
+// PetSprite is one pet's sheet (a data URL), what it may say and its name ("" for none).
 type PetSprite struct {
 	Sheet string   `json:"sheet"`
 	Lines []string `json:"lines"`
+	Name  string   `json:"name"`
+}
+
+// readPetName is the first line of a pet's .name file, cut to maxPetNameRunes.
+func readPetName(path string) string {
+	lines := readLines(path)
+	if len(lines) == 0 {
+		return ""
+	}
+	name := []rune(lines[0])
+	if len(name) > maxPetNameRunes {
+		name = name[:maxPetNameRunes]
+	}
+	return string(name)
 }
 
 func loadPets(dir string) []PetSprite {
@@ -41,8 +58,8 @@ func loadPets(dir string) []PetSprite {
 		if !ok {
 			continue
 		}
-		txt := filepath.Join(dir, strings.TrimSuffix(name, filepath.Ext(name))+".txt")
-		pets = append(pets, PetSprite{Sheet: url, Lines: readLines(txt)})
+		base := filepath.Join(dir, strings.TrimSuffix(name, filepath.Ext(name)))
+		pets = append(pets, PetSprite{Sheet: url, Lines: readLines(base + ".txt"), Name: readPetName(base + ".name")})
 	}
 	return pets
 }
